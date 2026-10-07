@@ -7,13 +7,22 @@ import BottomNav from './components/BottomNav';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('stock'); // 'stock' | 'bcv' | 'pago'
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('vk_last_search') || '');
   const [stockData, setStockData] = useState([]);
   const [bcvRate, setBcvRate] = useState({ tasa: 36.50, fuente: 'Cache Inicial' });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoadingStock, setIsLoadingStock] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+
+  // Persistir último término buscado para no perder el contexto al cambiar de pestaña o recargar
+  useEffect(() => {
+    if (searchTerm) {
+      localStorage.setItem('vk_last_search', searchTerm);
+    } else {
+      localStorage.removeItem('vk_last_search');
+    }
+  }, [searchTerm]);
 
   // Escuchar estado de conexión a Internet (Online / Offline)
   useEffect(() => {
@@ -32,7 +41,9 @@ export default function App() {
   // Cargar tasa BCV
   const fetchBcvRate = useCallback(async () => {
     try {
-      const res = await fetch('/api/bcv');
+      let res = await fetch('https://microapp-vk-bff.jjhernandezz100.workers.dev/api/bcv');
+      if (!res.ok) res = await fetch('/api/bcv');
+
       if (res.ok) {
         const data = await res.json();
         if (data && data.tasa) {
@@ -53,8 +64,14 @@ export default function App() {
   // Cargar inventario filtrado por término de búsqueda (search-as-you-type)
   const fetchStock = useCallback(async (query = '') => {
     setIsLoadingStock(true);
+    const workerUrl = `https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock?q=${encodeURIComponent(query)}`;
+    
     try {
-      const res = await fetch(`/api/stock?q=${encodeURIComponent(query)}`);
+      let res = await fetch(workerUrl);
+      if (!res.ok) {
+        res = await fetch(`/api/stock?q=${encodeURIComponent(query)}`);
+      }
+
       if (res.ok) {
         const json = await res.json();
         setStockData(json.data || []);
@@ -79,34 +96,35 @@ export default function App() {
         if (query) {
           const q = query.toLowerCase();
           const filtered = parsed.filter(m => 
-            m.nombre.toLowerCase().includes(q) || 
-            m.id.toLowerCase().includes(q) || 
-            m.categoria.toLowerCase().includes(q)
+            (m.nombre && m.nombre.toLowerCase().includes(q)) || 
+            (m.id && m.id.toLowerCase().includes(q)) || 
+            (m.categoria && m.categoria.toLowerCase().includes(q))
           );
           setStockData(filtered);
         } else {
           setStockData(parsed);
         }
       } else {
-        // Fallback inicial con datos de demostración
-        setStockData(getInitialMockCatalog());
+        setStockData([]);
       }
     } finally {
       setIsLoadingStock(false);
     }
   }, []);
 
-  // Función para re-verificar automáticamente en vivo modelos que contengan 1 o 2 unidades
+  // Función para re-verificar automáticamente en vivo modelos que contengan exactamente 1 unidad (¡ÚLTIMA!)
   const autoVerifyLowStockModels = async (models) => {
     const lowStockModels = models.filter(m => 
-      m.variantes && m.variantes.some(v => v.stock > 0 && v.stock <= 2)
+      m.variantes && m.variantes.some(v => v.stock === 1)
     );
 
     if (lowStockModels.length === 0) return;
 
     for (const model of lowStockModels) {
       try {
-        const res = await fetch(`/api/stock/verify?id=${encodeURIComponent(model.id)}`);
+        let res = await fetch(`https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock/verify?id=${encodeURIComponent(model.id)}`);
+        if (!res.ok) res = await fetch(`/api/stock/verify?id=${encodeURIComponent(model.id)}`);
+
         if (res.ok) {
           const json = await res.json();
           if (json.verified && json.data) {
@@ -156,7 +174,7 @@ export default function App() {
       />
 
       {/* Contenido Dinámico Según Pestaña Seleccionada */}
-      <main className="flex-1 overflow-hidden pb-16 relative">
+      <main className="flex-1 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] relative">
         {activeTab === 'stock' && (
           <StockModule
             stockData={stockData}

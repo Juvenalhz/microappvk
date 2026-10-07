@@ -198,7 +198,7 @@ async function fetchErp(endpoint, env, retryCount = 0) {
 }
 
 /**
- * Parsea un item del API de Finapartner a la estructura unificada de modelo/prendas
+ * Parsea un item del API de Finapartner a la estructura unificada de modelo/prendas agrupadas por color y talla
  */
 function parseFinapartnerItem(item) {
   const nombre = item.name || item.nombre || item.description || 'Prenda Sin Nombre';
@@ -206,48 +206,67 @@ function parseFinapartnerItem(item) {
   const categoria = item.category || item.categoria || 'General';
   const precioUsd = Number(item.sellingPrice || item.precio_usd || item.price || 0);
 
-  const sizeMap = new Map();
+  // Mapa de color -> mapa de talla
+  const colorMap = new Map();
+  const sizeOrder = { 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6 };
 
-  // Si posee variantes en item.items (donde Finapartner guarda el stock por talla)
+  const processVariant = (rawVar, stockQty, sku) => {
+    const cleanVar = (rawVar || 'ÚNICA').toString().toUpperCase().trim();
+    const parts = cleanVar.split(/\s+/);
+    
+    let colorName = 'GENERAL';
+    let tallaName = cleanVar;
+
+    if (parts.length > 1) {
+      colorName = parts.slice(0, parts.length - 1).join(' ');
+      tallaName = parts[parts.length - 1];
+    }
+
+    if (!colorMap.has(colorName)) {
+      colorMap.set(colorName, new Map());
+    }
+
+    const sizeMap = colorMap.get(colorName);
+    sizeMap.set(tallaName, {
+      talla: tallaName,
+      stock: Number(stockQty || 0),
+      sku: sku || `${modelId}-${colorName}-${tallaName}`
+    });
+  };
+
+  // 1. Procesar items/variantes
   if (Array.isArray(item.items) && item.items.length > 0) {
     for (const sub of item.items) {
-      const rawVar = (sub.variations?.[0] || sub.variation || sub.SKU || 'ÚNICA').toString().toUpperCase().trim();
-      const parts = rawVar.split(/\s+/);
-      const talla = parts[parts.length - 1]; // Toma la última palabra como talla (ej. S, M, L, XL, 30, 32, etc.)
-      const stockQty = Number(sub.amount !== undefined ? sub.amount : (sub.quantity || 0));
-      const sku = sub.SKU || `${modelId}-${talla}`;
-
-      sizeMap.set(talla, {
-        talla,
-        stock: stockQty,
-        sku
-      });
+      const rawVar = sub.variations?.[0] || sub.variation || sub.SKU || 'ÚNICA';
+      processVariant(rawVar, sub.amount !== undefined ? sub.amount : (sub.quantity || 0), sub.SKU);
     }
   } else if (Array.isArray(item.skuVariations) && item.skuVariations.length > 0) {
     for (const v of item.skuVariations) {
-      const rawVar = (v.variation || v.variations?.[0] || v.SKU || 'ÚNICA').toString().toUpperCase().trim();
-      const parts = rawVar.split(/\s+/);
-      const talla = parts[parts.length - 1];
-      const stockQty = Number(v.amount !== undefined ? v.amount : (v.amountVariation || 0));
-      const sku = v.SKU || `${modelId}-${talla}`;
-
-      sizeMap.set(talla, {
-        talla,
-        stock: stockQty,
-        sku
-      });
+      const rawVar = v.variation || v.variations?.[0] || v.SKU || 'ÚNICA';
+      processVariant(rawVar, v.amount !== undefined ? v.amount : (v.amountVariation || 0), v.SKU);
     }
   } else {
-    sizeMap.set('ÚNICA', {
-      talla: 'ÚNICA',
-      stock: Number(item.amount !== undefined ? item.amount : (item.stock || 0)),
-      sku: item.SKU || modelId
-    });
+    processVariant('ÚNICA', item.amount !== undefined ? item.amount : (item.stock || 0), item.SKU || modelId);
   }
 
-  const sizeOrder = { 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6 };
-  const variantes = Array.from(sizeMap.values()).sort((a, b) => (sizeOrder[a.talla] || 99) - (sizeOrder[b.talla] || 99));
-  const totalStock = variantes.reduce((acc, v) => acc + v.stock, 0);
+  // Convertir mapas a estructura de colores y tallas ordenadas
+  const colores = [];
+  let totalStock = 0;
+  const flatVariantes = [];
+
+  for (const [colorName, sizeMap] of colorMap.entries()) {
+    const tallas = Array.from(sizeMap.values()).sort((a, b) => (sizeOrder[a.talla] || 99) - (sizeOrder[b.talla] || 99));
+    const colorStock = tallas.reduce((acc, t) => acc + t.stock, 0);
+    totalStock += colorStock;
+
+    tallas.forEach(t => flatVariantes.push(t));
+
+    colores.push({
+      color: colorName,
+      total_color_stock: colorStock,
+      tallas
+    });
+  }
 
   return {
     id: modelId,
@@ -255,9 +274,10 @@ function parseFinapartnerItem(item) {
     categoria,
     precio_usd: precioUsd,
     imagen_url: item.imageUrl || item.image || null,
-    variantes,
+    colores,
+    variantes: flatVariantes, // compatibilidad hacia atras
     total_stock: totalStock,
-    search_text: normalizeText(`${nombre} ${modelId} ${categoria} ${variantes.map(v => v.sku).join(' ')}`)
+    search_text: normalizeText(`${nombre} ${modelId} ${categoria} ${colores.map(c => c.color).join(' ')} ${flatVariantes.map(v => v.sku).join(' ')}`)
   };
 }
 

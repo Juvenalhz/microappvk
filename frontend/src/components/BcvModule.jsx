@@ -52,16 +52,16 @@ export default function BcvModule({ bcvRate }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-4">
+    <div className="flex-1 flex flex-col justify-between p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-24">
       
       {/* Tarjeta de Tasa y Display de Cálculo */}
-      <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-5 shadow-xl shadow-black/30 relative overflow-hidden">
+      <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 shadow-xl shadow-black/30 relative overflow-hidden">
         
         {/* Adorno de fondo */}
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-gold/10 rounded-full blur-2xl pointer-events-none" />
 
         {/* Tasa Oficial Header */}
-        <div className="flex items-center justify-between mb-3 text-xs text-slate-400">
+        <div className="flex items-center justify-between mb-2 text-xs text-slate-400">
           <span className="flex items-center space-x-1 font-semibold text-slate-300">
             <Calculator className="w-4 h-4 text-brand-gold" />
             <span>Tasa Oficial BCV</span>
@@ -72,8 +72,8 @@ export default function BcvModule({ bcvRate }) {
         </div>
 
         {/* Campo USD Ingresado */}
-        <div className="text-right py-2">
-          <div className="text-xs text-slate-400 font-medium mb-1">Monto en Divisas (USD):</div>
+        <div className="text-right py-1">
+          <div className="text-xs text-slate-400 font-medium mb-0.5">Monto en Divisas (USD):</div>
           <div className="text-3xl font-black text-white font-mono flex items-center justify-end">
             <span className="text-emerald-400 mr-1">$</span>
             {usdInput || '0'}
@@ -116,26 +116,6 @@ export default function BcvModule({ bcvRate }) {
 
       </div>
 
-      {/* Botones de Acceso Rápido (Presupuestos Retail Frecuentes) */}
-      <div>
-        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-1 flex items-center space-x-1">
-          <Plus className="w-3.5 h-3.5 text-brand-500" />
-          <span>Sumar Precios Frecuentes:</span>
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          {[20, 25, 30, 50].map((amount) => (
-            <button
-              key={amount}
-              onClick={() => handleAddPreset(amount)}
-              className="py-2.5 rounded-xl bg-surface-card border border-surface-cardBorder hover:border-brand-500/50 text-white font-bold text-sm shadow-md transition-touch flex items-center justify-center space-x-0.5 active:bg-brand-500/20"
-            >
-              <span className="text-emerald-400 text-xs">$</span>
-              <span>+{amount}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Teclado Numérico Táctil */}
       <div className="grid grid-cols-3 gap-2 flex-1">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'].map((key) => {
@@ -144,7 +124,7 @@ export default function BcvModule({ bcvRate }) {
               <button
                 key={key}
                 onClick={() => handleKeyPress('DEL')}
-                className="py-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-touch active:scale-95 shadow-md"
+                className="py-3 rounded-2xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-touch active:scale-95 shadow-md"
               >
                 <Delete className="w-5 h-5" />
               </button>
@@ -155,7 +135,7 @@ export default function BcvModule({ bcvRate }) {
             <button
               key={key}
               onClick={() => handleKeyPress(key)}
-              className="py-3.5 rounded-2xl bg-surface-card border border-surface-cardBorder text-white font-extrabold text-xl shadow-md transition-touch active:scale-95 active:bg-slate-700"
+              className="py-3 rounded-2xl bg-surface-card border border-surface-cardBorder text-white font-extrabold text-xl shadow-md transition-touch active:scale-95 active:bg-slate-700"
             >
               {key}
             </button>

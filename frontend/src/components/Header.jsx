@@ -5,7 +5,7 @@ export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, lastSy
   const formattedRate = bcvRate ? Number(bcvRate.tasa).toFixed(2) : '--.--';
 
   return (
-    <header className="sticky top-0 z-30 glass-panel px-4 py-3 border-b border-surface-cardBorder">
+    <header className="sticky top-0 z-30 glass-panel px-4 py-3 safe-pt border-b border-surface-cardBorder">
       <div className="flex items-center justify-between max-w-lg mx-auto">
         
         {/* Marca / Título */}
