@@ -8,8 +8,40 @@ import BottomNav from './components/BottomNav';
 export default function App() {
   const [activeTab, setActiveTab] = useState('stock'); // 'stock' | 'bcv' | 'pago'
   const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('vk_last_search') || '');
-  const [stockData, setStockData] = useState([]);
-  const [bcvRate, setBcvRate] = useState({ tasa: 36.50, fuente: 'Cache Inicial' });
+  
+  // Carga instantánea (0ms) desde cache local al abrir la PWA
+  const [stockData, setStockData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vk_stock_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const lastSearch = localStorage.getItem('vk_last_search');
+        if (lastSearch) {
+          const q = lastSearch.toLowerCase();
+          return parsed.filter(m => 
+            (m.nombre && m.nombre.toLowerCase().includes(q)) || 
+            (m.id && m.id.toLowerCase().includes(q)) || 
+            (m.categoria && m.categoria.toLowerCase().includes(q))
+          );
+        }
+        return parsed;
+      }
+    } catch (e) {
+      console.warn('[App] Error al leer vk_stock_cache inicial:', e);
+    }
+    return [];
+  });
+
+  const [bcvRate, setBcvRate] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vk_bcv_cache');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {
+      console.warn('[App] Error al leer vk_bcv_cache inicial:', e);
+    }
+    return { tasa: 36.50, fuente: 'Cache Inicial' };
+  });
+
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isLoadingStock, setIsLoadingStock] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -48,22 +80,21 @@ export default function App() {
         const data = await res.json();
         if (data && data.tasa) {
           setBcvRate(data);
-          // Guardar en localStorage para disponibilidad instantánea 0ms
           localStorage.setItem('vk_bcv_cache', JSON.stringify(data));
         }
       }
     } catch (err) {
       console.warn('[App] Error al consultar /api/bcv, usando cache local:', err);
-      const cached = localStorage.getItem('vk_bcv_cache');
-      if (cached) {
-        setBcvRate(JSON.parse(cached));
-      }
     }
   }, []);
 
   // Cargar inventario filtrado por término de búsqueda (search-as-you-type)
   const fetchStock = useCallback(async (query = '') => {
-    setIsLoadingStock(true);
+    // Si no hay datos en pantalla, mostrar indicador de carga; de lo contrario actualizar en segundo plano silenciosamente
+    if (!stockData || stockData.length === 0) {
+      setIsLoadingStock(true);
+    }
+    
     const workerUrl = `https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock?q=${encodeURIComponent(query)}`;
     
     try {
@@ -77,10 +108,10 @@ export default function App() {
         setStockData(json.data || []);
         setLastSync(json.last_sync || null);
         
-        // Auto-Verificación en segundo plano para modelos con bajo stock (<= 2 unidades)
-        autoVerifyLowStockModels(json.data || []);
+        // Auto-Verificación en segundo plano no-bloqueante
+        setTimeout(() => autoVerifyLowStockModels(json.data || []), 50);
 
-        // Almacenar en localStorage snapshot para offline
+        // Almacenar en localStorage snapshot completo para offline
         if (!query) {
           localStorage.setItem('vk_stock_cache', JSON.stringify(json.data || []));
         }
@@ -92,7 +123,6 @@ export default function App() {
       const cachedStock = localStorage.getItem('vk_stock_cache');
       if (cachedStock) {
         const parsed = JSON.parse(cachedStock);
-        // Filtrar localmente si está offline
         if (query) {
           const q = query.toLowerCase();
           const filtered = parsed.filter(m => 
@@ -104,15 +134,13 @@ export default function App() {
         } else {
           setStockData(parsed);
         }
-      } else {
-        setStockData([]);
       }
     } finally {
       setIsLoadingStock(false);
     }
   }, []);
 
-  // Función para re-verificar automáticamente en vivo modelos que contengan exactamente 1 unidad (¡ÚLTIMA!)
+  // Función para re-verificar automáticamente en vivo modelos con 1 unidad (paralelizado en segundo plano)
   const autoVerifyLowStockModels = async (models) => {
     const lowStockModels = models.filter(m => 
       m.variantes && m.variantes.some(v => v.stock === 1)
@@ -120,23 +148,26 @@ export default function App() {
 
     if (lowStockModels.length === 0) return;
 
-    for (const model of lowStockModels) {
-      try {
-        let res = await fetch(`https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock/verify?id=${encodeURIComponent(model.id)}`);
-        if (!res.ok) res = await fetch(`/api/stock/verify?id=${encodeURIComponent(model.id)}`);
+    // Ejecutar verificaciones en paralelo sin bloquear el hilo principal
+    await Promise.allSettled(
+      lowStockModels.map(async (model) => {
+        try {
+          let res = await fetch(`https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock/verify?id=${encodeURIComponent(model.id)}`);
+          if (!res.ok) res = await fetch(`/api/stock/verify?id=${encodeURIComponent(model.id)}`);
 
-        if (res.ok) {
-          const json = await res.json();
-          if (json.verified && json.data) {
-            setStockData(prevData => 
-              prevData.map(item => item.id === json.data.id ? { ...item, ...json.data, verified_live: true } : item)
-            );
+          if (res.ok) {
+            const json = await res.json();
+            if (json.verified && json.data) {
+              setStockData(prevData => 
+                prevData.map(item => item.id === json.data.id ? { ...item, ...json.data, verified_live: true } : item)
+              );
+            }
           }
+        } catch (e) {
+          console.warn(`[AutoVerify] No se pudo verificar en vivo modelo ${model.id}:`, e);
         }
-      } catch (e) {
-        console.warn(`[AutoVerify] No se pudo verificar en vivo modelo ${model.id}:`, e);
-      }
-    }
+      })
+    );
   };
 
   // Carga inicial al montar la app
