@@ -117,128 +117,137 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                 {/* Separador */}
                 <div className="my-3 border-t border-slate-800/80" />
 
-                {/* Variantes por Color y Talla (Semáforo con Resaltado Inteligente) */}
+                {/* Variantes por Color y Talla (Semáforo Inteligente y Enfocado) */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Disponibilidad por Variantes:</span>
-                    <span className="text-xs font-medium text-slate-300">
-                      Total: <strong className="text-white">{item.total_stock} unids.</strong>
-                    </span>
-                  </div>
+                  {(() => {
+                    // Identificar si la búsqueda actual contiene tokens de color o talla
+                    const colorTokens = activeTokens.filter(token => {
+                      return item.colores?.some(c => {
+                        const normC = normalizeStr(c.color);
+                        const canonC = SYNONYMS_MAP[normC] || normC;
+                        return normC.includes(token) || canonC.includes(token) || SYNONYMS_MAP[token] === canonC;
+                      });
+                    });
+                    const hasColorToken = colorTokens.length > 0;
 
-                  {item.colores && item.colores.length > 0 ? (
-                    item.colores.map((colorGroup) => {
-                      const normColor = normalizeStr(colorGroup.color);
-                      const canonColor = SYNONYMS_MAP[normColor] || normColor;
-                      const isColorMatched = activeTokens.length > 0 && activeTokens.some(t => normColor.includes(t) || canonColor.includes(t));
+                    const sizeTokens = activeTokens.filter(token => {
+                      return item.colores?.some(c => c.tallas?.some(t => normalizeStr(t.talla) === token)) ||
+                             item.variantes?.some(v => normalizeStr(v.talla) === token);
+                    });
+                    const hasSizeToken = sizeTokens.length > 0;
 
-                      return (
-                        <div 
-                          key={colorGroup.color} 
-                          className={`p-2.5 rounded-xl border transition-all ${
-                            isColorMatched
-                              ? 'bg-slate-900/90 border-brand-500/60 ring-1 ring-brand-500/40'
-                              : 'bg-slate-900/40 border-slate-800/80'
-                          }`}
-                        >
-                          {colorGroup.color !== 'GENERAL' && (
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-bold text-slate-200 flex items-center space-x-1">
-                                <span className={`w-2 h-2 rounded-full inline-block ${isColorMatched ? 'bg-brand-500 animate-pulse' : 'bg-slate-500'}`} />
-                                <span className={`uppercase tracking-wide ${isColorMatched ? 'text-brand-500 font-extrabold' : ''}`}>
-                                  {colorGroup.color}
-                                </span>
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {colorGroup.total_color_stock} disp.
-                              </span>
-                            </div>
-                          )}
+                    // Filtrar colores: Si se especificó un color (ej: "marron"), ocultar los demás colores
+                    let displayColores = item.colores || [];
+                    if (hasColorToken) {
+                      displayColores = displayColores.filter(c => {
+                        const normC = normalizeStr(c.color);
+                        const canonC = SYNONYMS_MAP[normC] || normC;
+                        return colorTokens.some(t => normC.includes(t) || canonC.includes(t) || SYNONYMS_MAP[t] === canonC);
+                      });
+                    }
 
-                          <div className="grid grid-cols-4 gap-2">
-                            {colorGroup.tallas.map((varItem) => {
-                              const qty = varItem.stock;
-                              const isSizeMatched = activeTokens.length > 0 && activeTokens.includes(normalizeStr(varItem.talla));
-
-                              let badgeClasses = '';
-                              if (isSizeMatched) {
-                                badgeClasses = 'ring-2 ring-brand-500 scale-105 shadow-md shadow-brand-500/30 ';
-                              }
-
-                              if (qty > 1) {
-                                return (
-                                  <div 
-                                    key={varItem.talla}
-                                    className={`${badgeClasses} bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}
-                                  >
-                                    <span className="font-bold text-sm leading-none">{varItem.talla}</span>
-                                    <span className="text-[10px] font-medium opacity-90 mt-1">{qty} dispon.</span>
-                                  </div>
-                                );
-                              } else if (qty === 1) {
-                                return (
-                                  <div 
-                                    key={varItem.talla}
-                                    className={`${badgeClasses} relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}
-                                  >
-                                    <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 rounded-full uppercase tracking-wider">
-                                      ¡ÚLTIMA!
-                                    </span>
-                                    <span className="font-bold text-sm leading-none mt-1">{varItem.talla}</span>
-                                    <span className="text-[10px] font-bold text-amber-200 mt-0.5">1 disp.</span>
-                                  </div>
-                                );
-                              } else {
-                                return (
-                                  <div 
-                                    key={varItem.talla}
-                                    className={`${badgeClasses} bg-slate-800/40 border border-slate-800 text-slate-500 rounded-xl p-2 text-center flex flex-col items-center justify-center opacity-60`}
-                                  >
-                                    <span className="font-bold text-sm leading-none line-through">{varItem.talla}</span>
-                                    <span className="text-[10px] font-medium mt-1">Agotada</span>
-                                  </div>
-                                );
-                              }
-                            })}
-                          </div>
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                            {hasColorToken ? 'Color Filtrado:' : 'Disponibilidad por Variantes:'}
+                          </span>
+                          <span className="text-xs font-medium text-slate-300">
+                            Total: <strong className="text-white">{item.total_stock} unids.</strong>
+                          </span>
                         </div>
-                      );
-                    })
-                  ) : item.variantes && item.variantes.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-2">
-                      {item.variantes.map((varItem) => {
-                        const qty = varItem.stock;
-                        const isSizeMatched = activeTokens.length > 0 && activeTokens.includes(normalizeStr(varItem.talla));
-                        const badgeClasses = isSizeMatched ? 'ring-2 ring-brand-500 scale-105 shadow-md shadow-brand-500/30 ' : '';
 
-                        if (qty > 1) {
-                          return (
-                            <div key={varItem.talla} className={`${badgeClasses} bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}>
-                              <span className="font-bold text-sm leading-none">{varItem.talla}</span>
-                              <span className="text-[10px] font-medium opacity-90 mt-1">{qty} dispon.</span>
-                            </div>
-                          );
-                        } else if (qty === 1) {
-                          return (
-                            <div key={varItem.talla} className={`${badgeClasses} relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}>
-                              <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 rounded-full uppercase tracking-wider">¡ÚLTIMA!</span>
-                              <span className="font-bold text-sm leading-none mt-1">{varItem.talla}</span>
-                              <span className="text-[10px] font-bold text-amber-200 mt-0.5">1 disp.</span>
-                            </div>
-                          );
-                        } else {
-                          return (
-                            <div key={varItem.talla} className={`${badgeClasses} bg-slate-800/40 border border-slate-800 text-slate-500 rounded-xl p-2 text-center flex flex-col items-center justify-center opacity-60`}>
-                              <span className="font-bold text-sm leading-none line-through">{varItem.talla}</span>
-                              <span className="text-[10px] font-medium mt-1">Agotada</span>
-                            </div>
-                          );
-                        }
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-slate-400 italic">Sin variantes de talla</div>
-                  )}
+                        {displayColores.length > 0 ? (
+                          displayColores.map((colorGroup) => {
+                            const normColor = normalizeStr(colorGroup.color);
+                            const canonColor = SYNONYMS_MAP[normColor] || normColor;
+                            const isColorMatched = hasColorToken && colorTokens.some(t => normColor.includes(t) || canonColor.includes(t) || SYNONYMS_MAP[t] === canonColor);
+
+                            // Si se está buscando una talla específica, ocultar las variantes agotadas (stock 0) para limpiar la vista
+                            let visibleTallas = colorGroup.tallas || [];
+                            if (hasSizeToken) {
+                              const avail = visibleTallas.filter(t => t.stock > 0);
+                              if (avail.length > 0) visibleTallas = avail;
+                            }
+
+                            return (
+                              <div 
+                                key={colorGroup.color} 
+                                className={`p-2.5 rounded-xl border transition-all ${
+                                  isColorMatched
+                                    ? 'bg-slate-900/90 border-brand-500/60 ring-1 ring-brand-500/40'
+                                    : 'bg-slate-900/40 border-slate-800/80'
+                                }`}
+                              >
+                                {colorGroup.color !== 'GENERAL' && (
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-bold text-slate-200 flex items-center space-x-1">
+                                      <span className={`w-2 h-2 rounded-full inline-block ${isColorMatched ? 'bg-brand-500 animate-pulse' : 'bg-slate-500'}`} />
+                                      <span className={`uppercase tracking-wide ${isColorMatched ? 'text-brand-500 font-extrabold' : ''}`}>
+                                        {colorGroup.color}
+                                      </span>
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      {colorGroup.total_color_stock} disp.
+                                    </span>
+                                  </div>
+                                )}
+
+                                <div className="grid grid-cols-4 gap-2">
+                                  {visibleTallas.map((varItem) => {
+                                    const qty = varItem.stock;
+                                    const isSizeMatched = hasSizeToken && sizeTokens.includes(normalizeStr(varItem.talla));
+
+                                    let badgeClasses = '';
+                                    if (isSizeMatched) {
+                                      badgeClasses = 'ring-2 ring-brand-500 scale-105 shadow-md shadow-brand-500/30 ';
+                                    }
+
+                                    if (qty > 1) {
+                                      return (
+                                        <div 
+                                          key={varItem.talla}
+                                          className={`${badgeClasses} bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}
+                                        >
+                                          <span className="font-bold text-sm leading-none">{varItem.talla}</span>
+                                          <span className="text-[10px] font-medium opacity-90 mt-1">{qty} dispon.</span>
+                                        </div>
+                                      );
+                                    } else if (qty === 1) {
+                                      return (
+                                        <div 
+                                          key={varItem.talla}
+                                          className={`${badgeClasses} relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}
+                                        >
+                                          <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 rounded-full uppercase tracking-wider">
+                                            ¡ÚLTIMA!
+                                          </span>
+                                          <span className="font-bold text-sm leading-none mt-1">{varItem.talla}</span>
+                                          <span className="text-[10px] font-bold text-amber-200 mt-0.5">1 disp.</span>
+                                        </div>
+                                      );
+                                    } else {
+                                      return (
+                                        <div 
+                                          key={varItem.talla}
+                                          className={`${badgeClasses} bg-slate-800/40 border border-slate-800 text-slate-500 rounded-xl p-2 text-center flex flex-col items-center justify-center opacity-60`}
+                                        >
+                                          <span className="font-bold text-sm leading-none line-through">{varItem.talla}</span>
+                                          <span className="text-[10px] font-medium mt-1">Agotada</span>
+                                        </div>
+                                      );
+                                    }
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="text-xs text-slate-400 italic">No hay colores coincidentes</div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
               </div>
