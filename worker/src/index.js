@@ -414,13 +414,48 @@ async function handleGetStock(url, env) {
     lastSync = new Date().toISOString();
   }
 
-  // Filtrado search-as-you-type
+  // Synonyms map para búsqueda avanzada en Worker API
+  const SYNONYMS_MAP = {
+    'tshirt': 'franela', 't-shirt': 'franela', 'remera': 'franela', 'playera': 'franela', 'camisa': 'franela', 'franelas': 'franela',
+    'pantalon': 'pantalon', 'pantalones': 'pantalon', 'jean': 'pantalon', 'jeans': 'pantalon', 'denim': 'pantalon', 'pants': 'pantalon',
+    'chaqueta': 'chaqueta', 'chaquetas': 'chaqueta', 'sueter': 'chaqueta', 'hoodie': 'chaqueta', 'abrigo': 'chaqueta',
+    'mono': 'mono', 'monos': 'mono', 'jogger': 'mono', 'short': 'short', 'shorts': 'short',
+    'blanca': 'blanco', 'blancas': 'blanco', 'white': 'blanco',
+    'negra': 'negro', 'negras': 'negro', 'black': 'negro',
+    'marron': 'marron', 'marrón': 'marron', 'brown': 'marron', 'cafe': 'marron',
+    'azul': 'azul', 'azules': 'azul', 'blue': 'azul',
+    'roja': 'rojo', 'rojas': 'rojo', 'red': 'rojo',
+    'verde': 'verde', 'gris': 'gris', 'rosada': 'rosado', 'amarilla': 'amarillo'
+  };
+
+  const stopWords = new Set(['dame', 'todas', 'todos', 'las', 'los', 'les', 'de', 'del', 'el', 'la', 'un', 'una', 'unos', 'unas', 'en', 'con', 'para', 'por', 'o', 'y']);
+
+  // Filtrado search-as-you-type avanzado
   let results = catalog;
   if (normalizedQuery) {
-    const terms = normalizedQuery.split(/\s+/).filter(Boolean);
-    results = catalog.filter(model => {
-      return terms.every(term => model.search_text.includes(term));
-    });
+    const rawWords = normalizedQuery.split(/\s+/).filter(Boolean);
+    const tokens = rawWords.filter(w => !stopWords.has(w)).map(w => SYNONYMS_MAP[w] || w);
+
+    if (tokens.length > 0) {
+      results = catalog.filter(model => {
+        const itemNombre = normalizeText(model.nombre);
+        const itemCat = normalizeText(model.categoria);
+        const itemCatCanon = SYNONYMS_MAP[itemCat] || itemCat;
+        const itemId = normalizeText(model.id);
+
+        const itemColores = (model.colores || []).map(c => normalizeText(c.color));
+        const itemTallas = new Set();
+        (model.colores || []).forEach(c => (c.tallas || []).forEach(t => itemTallas.add(normalizeText(t.talla))));
+
+        return tokens.every(token => {
+          if (itemCat.includes(token) || itemCatCanon.includes(token)) return true;
+          if (itemNombre.includes(token) || itemId.includes(token)) return true;
+          if (itemColores.some(c => c.includes(token) || (SYNONYMS_MAP[c] && SYNONYMS_MAP[c].includes(token)))) return true;
+          if (itemTallas.has(token)) return true;
+          return false;
+        });
+      });
+    }
   }
 
   const readTimeMs = Date.now() - startTime;
