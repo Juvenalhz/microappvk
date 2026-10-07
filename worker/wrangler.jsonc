@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "microapp-vk-bff",
+  "main": "src/index.js",
+  "compatibility_date": "2024-09-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  // Cron Trigger para refrescar tasa BCV e inventario de forma desatendida
+  "triggers": {
+    "crons": [
+      "*/15 * * * *"
+    ]
+  },
+  // Variables de entorno por defecto (los secretos se configuran vía `wrangler secret put`)
+  "vars": {
+    "ERP_BASE_URL": "https://erp-demo.tiendavk.com/api",
+    "BCV_API_URL": "https://ve.dolarapi.com/v1/dolares/oficial"
+  },
+  // Binding de Workers KV para almacenar snapshot del catálogo, tasa BCV y token de sesión
+  "kv_namespaces": [
+    {
+      "binding": "STORE_KV",
+      "id": "c79e309c755b41be94b8945be3be9e3a",
+      "preview_id": "REPLACE_WITH_PREVIEW_KV_ID"
+    }
+  ]
+}

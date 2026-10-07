@@ -1,0 +1,15 @@
+{
+  "name": "microapp-vk-bff",
+  "version": "1.0.0",
+  "description": "BFF Cloudflare Worker con Workers KV para Microapp PWA Retail",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}

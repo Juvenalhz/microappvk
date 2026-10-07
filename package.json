@@ -1,0 +1,14 @@
+{
+  "name": "microapp-vk-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Microapp PWA para piso de venta retail (Frontend Vite + Backend Cloudflare Worker BFF)",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:worker": "npm --prefix worker run dev",
+    "build": "npm --prefix frontend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "deploy:worker": "npm --prefix worker run deploy"
+  }
+}
