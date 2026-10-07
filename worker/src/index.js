@@ -114,30 +114,43 @@ async function getErpToken(env, forceRefresh = false) {
     if (cachedToken) return cachedToken;
   }
 
-  console.log('[ERP Auth] Solicitando nuevo token de sesión al ERP...');
+  console.log('[ERP Auth] Solicitando nuevo token de sesión al ERP (Finapartner)...');
   
-  const baseUrl = env.ERP_BASE_URL || 'https://erp-demo.tiendavk.com/api';
-  const response = await fetch(`${baseUrl}/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: env.ERP_USER || 'admin_tienda',
-      password: env.ERP_PASS || 'password_tienda_secret'
-    })
-  });
+  const baseUrl = env.ERP_BASE_URL || 'https://api.finapartner.com/api';
+  // Intentar endpoint de signin / login
+  const loginEndpoints = ['/auth/signin', '/login'];
+  let token = null;
+  let lastError = null;
 
-  if (!response.ok) {
-    throw new Error(`Fallo autenticación ERP: Status ${response.status} ${response.statusText}`);
+  for (const endpoint of loginEndpoints) {
+    try {
+      const response = await fetch(`${baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: env.ERP_USER || 'admin@tiendavk.com',
+          username: env.ERP_USER || 'admin_tienda',
+          password: env.ERP_PASS || 'password_tienda_secret'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        token = data.token || data.access_token || data.accessToken || data.jwt || (data.data && data.data.token);
+        if (token) break;
+      } else {
+        lastError = `Status ${response.status} ${response.statusText}`;
+      }
+    } catch (e) {
+      lastError = e.message;
+    }
   }
 
-  const data = await response.json();
-  const token = data.token || data.access_token;
-  
   if (!token) {
-    throw new Error('El ERP no devolvió un token de sesión válido');
+    throw new Error(`Fallo autenticación ERP: ${lastError || 'No se pudo obtener token'}`);
   }
 
-  // Guardar en KV con exp de 23h (82800 segundos) para evitar expiración inesperada
+  // Guardar en KV con exp de 23h (82800 segundos)
   await env.STORE_KV.put('session_token', token, { expirationTtl: 82800 });
   console.log('[ERP Auth] Nuevo token almacenado en KV exitosamente');
   return token;
@@ -148,7 +161,7 @@ async function getErpToken(env, forceRefresh = false) {
  */
 async function fetchErp(endpoint, env, retryCount = 0) {
   const token = await getErpToken(env, retryCount > 0);
-  const baseUrl = env.ERP_BASE_URL || 'https://erp-demo.tiendavk.com/api';
+  const baseUrl = env.ERP_BASE_URL || 'https://api.finapartner.com/api';
 
   const response = await fetch(`${baseUrl}${endpoint}`, {
     headers: {
@@ -175,11 +188,32 @@ async function fetchErp(endpoint, env, retryCount = 0) {
  * Obtiene el inventario del ERP, agrupa las prendas por modelo y lo guarda en KV
  */
 async function syncCatalog(env) {
-  console.log('[Catalog Sync] Descargando snapshot completo del inventario ERP...');
+  console.log('[Catalog Sync] Descargando snapshot completo del inventario ERP Finapartner...');
   
   let rawItems = [];
   try {
-    rawItems = await fetchErp('/inventario', env);
+    // Intentar endpoint de inventario de Finapartner
+    const inventoryPath = '/inventory?currentPage=1&pageSize=500&sortedColumn=updatedAt&sortedDirection=desc&useScore=true&useSecurityStock=false';
+    let responseData = null;
+    try {
+      responseData = await fetchErp(inventoryPath, env);
+    } catch (e) {
+      // Fallback a /inventario standard
+      responseData = await fetchErp('/inventario', env);
+    }
+
+    // Normalizar respuesta si viene en formato paginado o envuelto ({ items: [...], data: [...] })
+    if (Array.isArray(responseData)) {
+      rawItems = responseData;
+    } else if (responseData && Array.isArray(responseData.items)) {
+      rawItems = responseData.items;
+    } else if (responseData && Array.isArray(responseData.data)) {
+      rawItems = responseData.data;
+    } else if (responseData && Array.isArray(responseData.inventory)) {
+      rawItems = responseData.inventory;
+    } else {
+      rawItems = [];
+    }
   } catch (err) {
     console.warn('[Catalog Sync] No se pudo conectar al ERP real, utilizando mock de respaldo:', err.message);
     rawItems = getMockErpInventory();
@@ -189,16 +223,22 @@ async function syncCatalog(env) {
   const groupedMap = new Map();
 
   for (const item of rawItems) {
-    // Clave de agrupación: modelo o código de modelo
-    const modelKey = (item.modelo_id || item.modelo || item.nombre || 'DESCONOCIDO').toUpperCase();
+    // Mapeo flexible de campos del ERP Finapartner
+    const itemName = item.nombre || item.name || item.description || item.title || item.modelo || 'Prenda Sin Nombre';
+    const modelKey = (item.modelo_id || item.modelo || item.modelCode || item.model || itemName).toUpperCase();
+    const category = item.categoria || item.category || item.categoryName || 'General';
+    const priceUsd = Number(item.precio_usd || item.price || item.usdPrice || item.salePrice || 0);
+    const size = (item.talla || item.size || item.variant || 'ÚNICA').toUpperCase();
+    const stockQty = Number(item.stock || item.quantity || item.availableQuantity || item.currentStock || 0);
+    const sku = item.sku || item.code || item.id || `${modelKey}-${size}`;
 
     if (!groupedMap.has(modelKey)) {
       groupedMap.set(modelKey, {
         id: modelKey,
-        nombre: item.nombre || item.modelo || 'Prenda Sin Nombre',
-        categoria: item.categoria || 'General',
-        precio_usd: Number(item.precio_usd || item.precio || 0),
-        imagen_url: item.imagen_url || null,
+        nombre: itemName,
+        categoria: category,
+        precio_usd: priceUsd,
+        imagen_url: item.imagen_url || item.imageUrl || item.image || null,
         variantes: [],
         total_stock: 0,
         search_text: ''
@@ -206,12 +246,11 @@ async function syncCatalog(env) {
     }
 
     const modelGroup = groupedMap.get(modelKey);
-    const stockQty = Number(item.stock || 0);
 
     modelGroup.variantes.push({
-      talla: (item.talla || 'ÚNICA').toUpperCase(),
+      talla: size,
       stock: stockQty,
-      sku: item.sku || `${modelKey}-${item.talla}`
+      sku: sku
     });
 
     modelGroup.total_stock += stockQty;
@@ -336,18 +375,34 @@ async function handleVerifyStockItem(url, env) {
 
   console.log(`[Realtime Verify] Re-verificando en vivo en ERP el modelo ${modelId}...`);
   
-  // Re-sincronizar inventario desde ERP o Mock en vivo
+  // Re-sincronizar inventario desde ERP o Mock en vivo usando endpoint de busqueda de Finapartner
   let rawItems = [];
   try {
-    rawItems = await fetchErp('/inventario', env);
+    const searchPath = `/inventory?currentPage=1&pageSize=50&search=${encodeURIComponent(modelId)}&sortedColumn=updatedAt&sortedDirection=desc&useScore=true&useSecurityStock=false`;
+    let responseData = null;
+    try {
+      responseData = await fetchErp(searchPath, env);
+    } catch (e) {
+      responseData = await fetchErp('/inventario', env);
+    }
+
+    if (Array.isArray(responseData)) {
+      rawItems = responseData;
+    } else if (responseData && Array.isArray(responseData.items)) {
+      rawItems = responseData.items;
+    } else if (responseData && Array.isArray(responseData.data)) {
+      rawItems = responseData.data;
+    }
   } catch (err) {
     rawItems = getMockErpInventory();
   }
 
   // Filtrar solo las variantes de este modelo
-  const modelItems = rawItems.filter(i => 
-    (i.modelo_id || i.modelo || i.nombre || '').toUpperCase() === modelId.toUpperCase()
-  );
+  const modelItems = rawItems.filter(i => {
+    const name = i.nombre || i.name || i.description || i.title || i.modelo || '';
+    const mId = i.modelo_id || i.modelo || i.modelCode || i.model || name;
+    return mId.toUpperCase() === modelId.toUpperCase() || name.toUpperCase().includes(modelId.toUpperCase());
+  });
 
   if (modelItems.length === 0) {
     return new Response(JSON.stringify({ verified: false, message: 'Modelo no encontrado en ERP' }), { headers: corsHeaders });
@@ -355,17 +410,25 @@ async function handleVerifyStockItem(url, env) {
 
   // Re-agrupar el modelo actualizado
   const sizeOrder = { 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6 };
+  const firstItem = modelItems[0];
+  const itemName = firstItem.nombre || firstItem.name || firstItem.description || firstItem.title || firstItem.modelo || 'Prenda Sin Nombre';
+  const priceUsd = Number(firstItem.precio_usd || firstItem.price || firstItem.usdPrice || firstItem.salePrice || 0);
+
   const updatedModel = {
     id: modelId.toUpperCase(),
-    nombre: modelItems[0].nombre || modelItems[0].modelo,
-    categoria: modelItems[0].categoria || 'General',
-    precio_usd: Number(modelItems[0].precio_usd || modelItems[0].precio || 0),
-    variantes: modelItems.map(item => ({
-      talla: (item.talla || 'ÚNICA').toUpperCase(),
-      stock: Number(item.stock || 0),
-      sku: item.sku || `${modelId}-${item.talla}`
-    })).sort((a, b) => (sizeOrder[a.talla] || 99) - (sizeOrder[b.talla] || 99)),
-    total_stock: modelItems.reduce((acc, curr) => acc + Number(curr.stock || 0), 0)
+    nombre: itemName,
+    categoria: firstItem.categoria || firstItem.category || firstItem.categoryName || 'General',
+    precio_usd: priceUsd,
+    variantes: modelItems.map(item => {
+      const size = (item.talla || item.size || item.variant || 'ÚNICA').toUpperCase();
+      const stockQty = Number(item.stock || item.quantity || item.availableQuantity || item.currentStock || 0);
+      return {
+        talla: size,
+        stock: stockQty,
+        sku: item.sku || item.code || item.id || `${modelId}-${size}`
+      };
+    }).sort((a, b) => (sizeOrder[a.talla] || 99) - (sizeOrder[b.talla] || 99)),
+    total_stock: modelItems.reduce((acc, curr) => acc + Number(curr.stock || curr.quantity || curr.availableQuantity || 0), 0)
   };
 
   // Actualizar en caliente la entrada en la cache de KV para mantener la consistencia
