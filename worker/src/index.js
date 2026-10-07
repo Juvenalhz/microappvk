@@ -326,19 +326,54 @@ async function syncCatalog(env, throwOnError = false) {
  */
 async function syncBcvRate(env) {
   console.log('[BCV Sync] Consultando tasa oficial del BCV...');
-  let tasa = 36.50; // Fallback razonable
-  let fuente = 'Oficial BCV';
+  let tasa = 36.50;
+  let fuente = 'Banco Central de Venezuela (bcv.org.ve)';
 
+  // 1. Intentar raspar directamente la página oficial del BCV
   try {
-    const bcvUrl = env.BCV_API_URL || 'https://ve.dolarapi.com/v1/dolares/oficial';
-    const res = await fetch(bcvUrl);
-    if (res.ok) {
-      const data = await res.json();
-      tasa = Number(data.promedio || data.monto || data.tasa || tasa);
-      fuente = data.fuente || 'dolarapi.com (BCV)';
+    const resBcv = await fetch('https://www.bcv.org.ve', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml'
+      }
+    });
+
+    if (resBcv.ok) {
+      const html = await resBcv.text();
+      // Buscar contenedor de USD en la tabla del BCV
+      const usdMatch = html.match(/id=["']usd["'][\s\S]*?<strong[^>]*>\s*([\d.,]+)\s*<\/strong>/i) || 
+                       html.match(/<span>\s*USD\s*<\/span>[\s\S]*?<strong[^>]*>\s*([\d.,]+)\s*<\/strong>/i);
+
+      if (usdMatch && usdMatch[1]) {
+        const rawTasaStr = usdMatch[1].replace(/\./g, '').replace(',', '.');
+        const parsedTasa = parseFloat(rawTasaStr);
+        if (!isNaN(parsedTasa) && parsedTasa > 0) {
+          tasa = parsedTasa;
+          fuente = 'Oficial BCV (bcv.org.ve)';
+          console.log(`[BCV Sync] Tasa extraída directamente de bcv.org.ve: ${tasa}`);
+        }
+      }
     }
-  } catch (err) {
-    console.warn('[BCV Sync] Error al obtener tasa online, usando fallback:', err.message);
+  } catch (e) {
+    console.warn('[BCV Sync] No se pudo obtener directamente de bcv.org.ve, usando API respaldo:', e.message);
+  }
+
+  // 2. Si falló el scrape directo de bcv.org.ve, usar API de respaldo (dolarapi.com)
+  if (tasa === 36.50) {
+    try {
+      const bcvUrl = env.BCV_API_URL || 'https://ve.dolarapi.com/v1/dolares/oficial';
+      const res = await fetch(bcvUrl);
+      if (res.ok) {
+        const data = await res.json();
+        const parsed = Number(data.promedio || data.monto || data.tasa);
+        if (!isNaN(parsed) && parsed > 0) {
+          tasa = parsed;
+          fuente = 'DolarApi.com (BCV Oficial)';
+        }
+      }
+    } catch (err) {
+      console.warn('[BCV Sync] Error al obtener tasa de API respaldo:', err.message);
+    }
   }
 
   const bcvData = {
@@ -348,7 +383,7 @@ async function syncBcvRate(env) {
   };
 
   await env.STORE_KV.put('tasa_bcv', JSON.stringify(bcvData));
-  console.log(`[BCV Sync] Tasa oficial guardada en KV: ${tasa} Bs/USD`);
+  console.log(`[BCV Sync] Tasa oficial guardada en KV: ${tasa} Bs/USD (${fuente})`);
   return bcvData;
 }
 
