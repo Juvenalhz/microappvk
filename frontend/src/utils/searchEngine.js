@@ -1,7 +1,7 @@
 /**
  * Diccionario de Sinónimos y Alias para Tienda Retail (Venezuela)
  */
-const SYNONYMS_MAP = {
+export const SYNONYMS_MAP = {
   // Categorías
   'tshirt': 'franela',
   't-shirt': 'franela',

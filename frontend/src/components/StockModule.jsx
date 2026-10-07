@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Search, X, Package, CheckCircle2 } from 'lucide-react';
-import { filterCatalog, tokenizeQuery, normalizeStr } from '../utils/searchEngine';
+import { filterCatalog, tokenizeQuery, normalizeStr, SYNONYMS_MAP } from '../utils/searchEngine';
 
 export default function StockModule({ stockData, bcvRate, searchTerm, setSearchTerm, isLoading }) {
   const inputRef = useRef(null);
@@ -128,7 +128,9 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
 
                   {item.colores && item.colores.length > 0 ? (
                     item.colores.map((colorGroup) => {
-                      const isColorMatched = activeTokens.length > 0 && activeTokens.some(t => normalizeStr(colorGroup.color).includes(t));
+                      const normColor = normalizeStr(colorGroup.color);
+                      const canonColor = SYNONYMS_MAP[normColor] || normColor;
+                      const isColorMatched = activeTokens.length > 0 && activeTokens.some(t => normColor.includes(t) || canonColor.includes(t));
 
                       return (
                         <div 
