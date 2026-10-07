@@ -5,7 +5,8 @@ export default function BcvModule({ bcvRate }) {
   const [usdInput, setUsdInput] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const tasa = bcvRate ? Number(bcvRate.tasa) : 36.50;
+  const rawTasa = bcvRate ? Number(bcvRate.tasa) : 36.50;
+  const tasa = Math.floor(rawTasa * 100) / 100;
 
   // Calculo de monto en USD
   const numericUsd = parseFloat(usdInput) || 0;
@@ -55,7 +56,7 @@ export default function BcvModule({ bcvRate }) {
     <div className="flex-1 flex flex-col justify-between p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-24">
       
       {/* Tarjeta de Tasa y Display de Cálculo */}
-      <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 shadow-xl shadow-black/30 relative overflow-hidden">
+      <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 pb-5 shadow-xl shadow-black/30 relative overflow-hidden">
         
         {/* Adorno de fondo */}
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-gold/10 rounded-full blur-2xl pointer-events-none" />
@@ -80,10 +81,10 @@ export default function BcvModule({ bcvRate }) {
           </div>
         </div>
 
-        <div className="my-2 border-t border-slate-800" />
+        <div className="my-2.5 border-t border-slate-800" />
 
         {/* Resultado Conversión en Bolívares */}
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between pt-1 pb-1">
           <div>
             <span className="text-xs text-slate-400 font-medium">Total a Pagar en Bs:</span>
             <div className="text-2xl font-black text-brand-gold font-mono tracking-tight">

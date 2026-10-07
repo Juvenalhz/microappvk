@@ -2,7 +2,8 @@ import React from 'react';
 import { RefreshCw, Wifi, WifiOff, DollarSign } from 'lucide-react';
 
 export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, lastSync }) {
-  const formattedRate = bcvRate ? Number(bcvRate.tasa).toFixed(2) : '--.--';
+  const rawRate = bcvRate ? Number(bcvRate.tasa) : 0;
+  const formattedRate = rawRate > 0 ? (Math.floor(rawRate * 100) / 100).toFixed(2) : '--.--';
 
   return (
     <header className="sticky top-0 z-30 glass-panel px-4 py-3 safe-pt border-b border-surface-cardBorder">

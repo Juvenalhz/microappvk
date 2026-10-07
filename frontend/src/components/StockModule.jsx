@@ -3,7 +3,8 @@ import { Search, X, Package, CheckCircle2 } from 'lucide-react';
 
 export default function StockModule({ stockData, bcvRate, searchTerm, setSearchTerm, isLoading }) {
   const inputRef = useRef(null);
-  const tasa = bcvRate ? Number(bcvRate.tasa) : 0;
+  const rawTasa = bcvRate ? Number(bcvRate.tasa) : 0;
+  const tasa = rawTasa > 0 ? Math.floor(rawTasa * 100) / 100 : 0;
 
   const handleClear = () => {
     setSearchTerm('');
