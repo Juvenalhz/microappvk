@@ -211,37 +211,48 @@ function parseFinapartnerItem(item) {
   const modelId = (item._id || item.SKU || item.sku || item.code || nombre).toUpperCase();
   const categoria = item.category || item.categoria || 'General';
   
-  // Extraer el precio en USD más actualizado del producto o sus sub-variantes
+  // Extraer exclusivamente el precio de VENTA al público (sellingPrice / salePrice / retailPrice)
   let precioUsd = 0;
 
-  // 1. Revisar si alguna sub-variante tiene un precio definido (muchos ERPs actualizan precio a nivel de variante)
-  if (Array.isArray(item.items) && item.items.length > 0) {
-    for (const sub of item.items) {
-      const cand = sub.sellingPrice ?? sub.price ?? sub.salePrice ?? sub.unitPrice ?? sub.precio_usd ?? sub.precio;
-      if (cand !== undefined && cand !== null && Number(cand) > 0) {
-        precioUsd = Number(cand);
-        break;
-      }
+  // 1. Prioridad: 'sellingPrice' o 'salePrice' o 'retailPrice' en la raíz del producto ERP
+  const rootSellingCandidates = [
+    item.sellingPrice,
+    item.salePrice,
+    item.retailPrice,
+    item.precio_venta,
+    item.precio_usd
+  ];
+
+  for (const cand of rootSellingCandidates) {
+    if (cand !== undefined && cand !== null && Number(cand) > 0) {
+      precioUsd = Number(cand);
+      break;
     }
   }
 
-  // 2. Si no se encontró en sub-variantes, revisar en la raíz del producto
-  if (precioUsd === 0) {
-    const rootCandidates = [
-      item.sellingPrice,
-      item.price,
-      item.salePrice,
-      item.unitPrice,
-      item.precio_usd,
-      item.precio,
-      item.value
-    ];
-    for (const cand of rootCandidates) {
-      if (cand !== undefined && cand !== null && Number(cand) > 0) {
-        precioUsd = Number(cand);
-        break;
+  // 2. Si no se encontró en la raíz, buscar 'sellingPrice' o 'salePrice' en las sub-variantes
+  if (precioUsd === 0 && Array.isArray(item.items) && item.items.length > 0) {
+    for (const sub of item.items) {
+      const subSellingCandidates = [
+        sub.sellingPrice,
+        sub.salePrice,
+        sub.retailPrice,
+        sub.precio_venta,
+        sub.precio_usd
+      ];
+      for (const cand of subSellingCandidates) {
+        if (cand !== undefined && cand !== null && Number(cand) > 0) {
+          precioUsd = Number(cand);
+          break;
+        }
       }
+      if (precioUsd > 0) break;
     }
+  }
+
+  // 3. Fallback final si no existe ninguna de las anteriores
+  if (precioUsd === 0) {
+    precioUsd = Number(item.sellingPrice || item.salePrice || item.precio_usd || item.price || 0);
   }
 
   // Mapa de color -> mapa de talla
