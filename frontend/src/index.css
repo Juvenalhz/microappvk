@@ -50,3 +50,16 @@
 .transition-touch:active {
   transform: scale(0.96);
 }
+
+/* Optimización de Scroll GPU y Renderizado Fluido (60 FPS / 120 Hz) */
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+  will-change: scroll-position;
+}
+
+.product-card {
+  contain: content;
+  content-visibility: auto;
+  contain-intrinsic-size: 180px;
+}

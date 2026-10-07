@@ -48,8 +48,8 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
         {isLoading && <span className="text-brand-500 font-medium animate-pulse">Buscando...</span>}
       </div>
 
-      {/* Lista de Modelos (Scrollable) */}
-      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 no-scrollbar pb-24">
+      {/* Lista de Modelos (Scrollable con aceleración GPU) */}
+      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 no-scrollbar smooth-scroll pb-24">
         {!stockData || stockData.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-surface-card/40 rounded-2xl border border-surface-cardBorder">
             <Package className="w-12 h-12 text-slate-600 mb-2 stroke-[1.5]" />
@@ -63,7 +63,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
             return (
               <div 
                 key={item.id}
-                className="bg-surface-card border border-surface-cardBorder rounded-2xl p-4 shadow-lg shadow-black/20 hover:border-slate-700 transition-all"
+                className="product-card bg-surface-card border border-surface-cardBorder rounded-2xl p-4 shadow-md shadow-black/20"
               >
                 {/* Cabecera del Modelo */}
                 <div className="flex items-start justify-between">
@@ -140,9 +140,9 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                               return (
                                 <div 
                                   key={varItem.talla}
-                                  className="relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center shadow-lg shadow-amber-500/10"
+                                  className="relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center"
                                 >
-                                  <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 py-0.2 rounded-full uppercase tracking-wider animate-bounce">
+                                  <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 rounded-full uppercase tracking-wider">
                                     ¡ÚLTIMA!
                                   </span>
                                   <span className="font-bold text-sm leading-none mt-1">{varItem.talla}</span>
@@ -177,8 +177,8 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                           );
                         } else if (qty === 1) {
                           return (
-                            <div key={varItem.talla} className="relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center shadow-lg shadow-amber-500/10">
-                              <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 py-0.2 rounded-full uppercase tracking-wider animate-bounce">¡ÚLTIMA!</span>
+                            <div key={varItem.talla} className="relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center">
+                              <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 rounded-full uppercase tracking-wider">¡ÚLTIMA!</span>
                               <span className="font-bold text-sm leading-none mt-1">{varItem.talla}</span>
                               <span className="text-[10px] font-bold text-amber-200 mt-0.5">1 disp.</span>
                             </div>
