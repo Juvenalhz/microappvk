@@ -9,6 +9,7 @@
     "dev:worker": "npm --prefix worker run dev",
     "build": "npm --prefix frontend run build",
     "build:frontend": "npm --prefix frontend run build",
-    "deploy:worker": "npm --prefix worker run deploy"
+    "deploy:worker": "npm --prefix worker run deploy",
+    "deploy:frontend": "npx wrangler pages deploy frontend/dist --project-name=microapp-vk-pwa --branch=main"
   }
 }

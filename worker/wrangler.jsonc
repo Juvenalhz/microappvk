@@ -15,6 +15,7 @@
   // Variables de entorno por defecto (los secretos se configuran vía `wrangler secret put`)
   "vars": {
     "ERP_BASE_URL": "https://api.finapartner.com/api",
+    "ERP_TENANT_ID": "vkmen",
     "BCV_API_URL": "https://ve.dolarapi.com/v1/dolares/oficial"
   },
   // Binding de Workers KV para almacenar snapshot del catálogo, tasa BCV y token de sesión
