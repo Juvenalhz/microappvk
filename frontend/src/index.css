@@ -34,12 +34,12 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Safe area padding para teléfonos con notch (iOS/Android) o barra inferior de gestos */
+/* Safe area padding adaptativo para todo tipo de iPhone (12/13/14/15, Plus/Pro/Max, SE) y Android */
 .safe-pt {
-  padding-top: max(0.75rem, env(safe-area-inset-top));
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0.75rem));
 }
 .safe-pb {
-  padding-bottom: env(safe-area-inset-bottom, 0.25rem);
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0.5rem));
 }
 
 /* Animaciones suaves */

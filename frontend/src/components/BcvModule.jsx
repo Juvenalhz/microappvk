@@ -53,7 +53,7 @@ export default function BcvModule({ bcvRate }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-24">
+    <div className="flex-1 flex flex-col justify-between p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-[calc(5.5rem+env(safe-area-inset-bottom,1.5rem))]">
       
       {/* Tarjeta de Tasa y Display de Cálculo */}
       <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 pb-5 shadow-xl shadow-black/30 relative overflow-hidden">

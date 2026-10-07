@@ -210,7 +210,39 @@ function parseFinapartnerItem(item) {
   const nombre = item.name || item.nombre || item.description || 'Prenda Sin Nombre';
   const modelId = (item._id || item.SKU || item.sku || item.code || nombre).toUpperCase();
   const categoria = item.category || item.categoria || 'General';
-  const precioUsd = Number(item.sellingPrice || item.precio_usd || item.price || 0);
+  
+  // Extraer el precio en USD más actualizado del producto o sus sub-variantes
+  let precioUsd = 0;
+
+  // 1. Revisar si alguna sub-variante tiene un precio definido (muchos ERPs actualizan precio a nivel de variante)
+  if (Array.isArray(item.items) && item.items.length > 0) {
+    for (const sub of item.items) {
+      const cand = sub.sellingPrice ?? sub.price ?? sub.salePrice ?? sub.unitPrice ?? sub.precio_usd ?? sub.precio;
+      if (cand !== undefined && cand !== null && Number(cand) > 0) {
+        precioUsd = Number(cand);
+        break;
+      }
+    }
+  }
+
+  // 2. Si no se encontró en sub-variantes, revisar en la raíz del producto
+  if (precioUsd === 0) {
+    const rootCandidates = [
+      item.sellingPrice,
+      item.price,
+      item.salePrice,
+      item.unitPrice,
+      item.precio_usd,
+      item.precio,
+      item.value
+    ];
+    for (const cand of rootCandidates) {
+      if (cand !== undefined && cand !== null && Number(cand) > 0) {
+        precioUsd = Number(cand);
+        break;
+      }
+    }
+  }
 
   // Mapa de color -> mapa de talla
   const colorMap = new Map();

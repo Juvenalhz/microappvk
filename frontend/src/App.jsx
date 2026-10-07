@@ -242,7 +242,7 @@ export default function App() {
       />
 
       {/* Contenido Dinámico Según Pestaña Seleccionada */}
-      <main className="flex-1 overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] relative">
+      <main className="flex-1 overflow-hidden relative">
         {activeTab === 'stock' && (
           <StockModule
             stockData={stockData}
