@@ -56,22 +56,28 @@ export default {
         return await handleVerifyStockItem(url, env);
       }
 
-      // Ruta opcional para sincronización manual: POST /api/sync
-      if (url.pathname === '/api/sync' && method === 'POST') {
+      // Ruta para sincronización manual en vivo con ERP: POST /api/sync
+      if (url.pathname === '/api/sync' && (method === 'POST' || method === 'GET')) {
         let syncError = null;
         let catalog = [];
         try {
-          catalog = await syncCatalog(env, true); // re-throw errors
+          catalog = await syncCatalog(env, true); // forzar descarga fresca del ERP
         } catch (e) {
+          console.error('[Sync Endpoint Error]:', e);
           syncError = e.message;
         }
         const bcv = await syncBcvRate(env);
+        const lastSync = new Date().toISOString();
+
         return new Response(
           JSON.stringify({
-            message: syncError ? 'Sincronización falló (usando mock)' : 'Sincronización manual completada',
+            success: !syncError,
+            message: syncError ? `Error al conectar con ERP: ${syncError}` : 'Sincronización en vivo con ERP completada',
             catalog_count: catalog.length,
-            erp_error: syncError,
-            bcv
+            data: catalog,
+            bcv,
+            last_sync: lastSync,
+            erp_error: syncError
           }),
           { headers: corsHeaders }
         );

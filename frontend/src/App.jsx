@@ -185,11 +185,48 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [searchTerm, fetchStock]);
 
-  // Refresco manual al presionar el botón de la cabecera
+  // Refresco manual al presionar el botón de la cabecera (Sincronización en vivo con el ERP)
   const handleRefresh = async () => {
     setIsSyncing(true);
-    await Promise.all([fetchBcvRate(), fetchStock(searchTerm)]);
-    setIsSyncing(false);
+    try {
+      let res = await fetch('https://microapp-vk-bff.jjhernandezz100.workers.dev/api/sync', { method: 'POST' });
+      if (!res.ok) {
+        res = await fetch('/api/sync', { method: 'POST' });
+      }
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+          // Filtrar con el término de búsqueda actual si existe
+          if (searchTerm) {
+            const q = searchTerm.toLowerCase();
+            const filtered = json.data.filter(m => 
+              (m.nombre && m.nombre.toLowerCase().includes(q)) || 
+              (m.id && m.id.toLowerCase().includes(q)) || 
+              (m.categoria && m.categoria.toLowerCase().includes(q))
+            );
+            setStockData(filtered);
+          } else {
+            setStockData(json.data);
+          }
+          localStorage.setItem('vk_stock_cache', JSON.stringify(json.data));
+        }
+        if (json.bcv) {
+          setBcvRate(json.bcv);
+          localStorage.setItem('vk_bcv_cache', JSON.stringify(json.bcv));
+        }
+        if (json.last_sync) {
+          setLastSync(json.last_sync);
+        }
+      } else {
+        await Promise.all([fetchBcvRate(), fetchStock(searchTerm)]);
+      }
+    } catch (err) {
+      console.warn('[App] Error al forzar sincronización manual en vivo:', err);
+      await Promise.all([fetchBcvRate(), fetchStock(searchTerm)]);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
