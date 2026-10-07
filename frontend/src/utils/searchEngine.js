@@ -43,64 +43,21 @@ export const SYNONYMS_MAP = {
   'bermuda': 'short',
   'bermudas': 'short',
 
-  // Colores (masculino / femenino / inglés / variantes)
-  'blanca': 'blanco',
-  'blancas': 'blanco',
-  'blanco': 'blanco',
-  'blancos': 'blanco',
-  'white': 'blanco',
-
-  'negra': 'negro',
-  'negras': 'negro',
-  'negro': 'negro',
-  'negros': 'negro',
-  'black': 'negro',
-
-  'marron': 'marron',
-  'marrón': 'marron',
-  'marrones': 'marron',
-  'brown': 'marron',
-  'cafe': 'marron',
-  'café': 'marron',
-
-  'azul': 'azul',
-  'azules': 'azul',
-  'blue': 'azul',
-  'marino': 'azul',
-  'navy': 'azul',
-
-  'roja': 'rojo',
-  'rojas': 'rojo',
-  'rojo': 'rojo',
-  'rojos': 'rojo',
-  'red': 'rojo',
-
-  'verde': 'verde',
-  'verdes': 'verde',
-  'green': 'verde',
-
-  'gris': 'gris',
-  'grises': 'gris',
-  'gray': 'gris',
-  'grey': 'gris',
-
-  'rosada': 'rosado',
-  'rosadas': 'rosado',
-  'rosado': 'rosado',
-  'rosados': 'rosado',
-  'pink': 'rosado',
-  'rosa': 'rosado',
-
-  'amarilla': 'amarillo',
-  'amarillas': 'amarillo',
-  'amarillo': 'amarillo',
-  'amarillos': 'amarillo',
-  'yellow': 'amarillo',
-
-  'beige': 'beige',
-  'crema': 'beige',
-  'khaki': 'beige',
-  'caqui': 'beige'
+  // Colores (masculino / femenino / inglés / plural / tonos)
+  'blanca': 'blanco', 'blancas': 'blanco', 'blanco': 'blanco', 'blancos': 'blanco', 'white': 'blanco',
+  'negra': 'negro', 'negras': 'negro', 'negro': 'negro', 'negros': 'negro', 'black': 'negro',
+  'marron': 'marron', 'marrón': 'marron', 'marrones': 'marron', 'brown': 'marron', 'cafe': 'marron', 'café': 'marron',
+  'azul': 'azul', 'azules': 'azul', 'blue': 'azul', 'marino': 'azul', 'navy': 'azul', 'celeste': 'azul',
+  'roja': 'rojo', 'rojas': 'rojo', 'rojo': 'rojo', 'rojos': 'rojo', 'red': 'rojo',
+  'verde': 'verde', 'verdes': 'verde', 'green': 'verde', 'oliva': 'verde', 'olive': 'verde',
+  'gris': 'gris', 'grises': 'gris', 'gray': 'gris', 'grey': 'gris', 'plata': 'gris', 'silver': 'gris',
+  'rosada': 'rosado', 'rosadas': 'rosado', 'rosado': 'rosado', 'rosados': 'rosado', 'pink': 'rosado', 'rosa': 'rosado',
+  'amarilla': 'amarillo', 'amarillas': 'amarillo', 'amarillo': 'amarillo', 'amarillos': 'amarillo', 'yellow': 'amarillo', 'mostaza': 'amarillo',
+  'morada': 'morado', 'moradas': 'morado', 'morado': 'morado', 'morados': 'morado', 'purple': 'morado', 'violeta': 'morado',
+  'vinotinto': 'vinotinto', 'vino': 'vinotinto', 'burgundy': 'vinotinto',
+  'naranja': 'naranja', 'naranjas': 'naranja', 'orange': 'naranja',
+  'fucsia': 'fucsia', 'fuchsia': 'fucsia',
+  'beige': 'beige', 'crema': 'beige', 'khaki': 'beige', 'caqui': 'beige'
 };
 
 /**

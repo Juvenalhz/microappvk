@@ -420,12 +420,17 @@ async function handleGetStock(url, env) {
     'pantalon': 'pantalon', 'pantalones': 'pantalon', 'jean': 'pantalon', 'jeans': 'pantalon', 'denim': 'pantalon', 'pants': 'pantalon',
     'chaqueta': 'chaqueta', 'chaquetas': 'chaqueta', 'sueter': 'chaqueta', 'hoodie': 'chaqueta', 'abrigo': 'chaqueta',
     'mono': 'mono', 'monos': 'mono', 'jogger': 'mono', 'short': 'short', 'shorts': 'short',
-    'blanca': 'blanco', 'blancas': 'blanco', 'white': 'blanco',
-    'negra': 'negro', 'negras': 'negro', 'black': 'negro',
-    'marron': 'marron', 'marrón': 'marron', 'brown': 'marron', 'cafe': 'marron',
-    'azul': 'azul', 'azules': 'azul', 'blue': 'azul',
-    'roja': 'rojo', 'rojas': 'rojo', 'red': 'rojo',
-    'verde': 'verde', 'gris': 'gris', 'rosada': 'rosado', 'amarilla': 'amarillo'
+    'blanca': 'blanco', 'blancas': 'blanco', 'blanco': 'blanco', 'blancos': 'blanco', 'white': 'blanco',
+    'negra': 'negro', 'negras': 'negro', 'negro': 'negro', 'negros': 'negro', 'black': 'negro',
+    'marron': 'marron', 'marrón': 'marron', 'marrones': 'marron', 'brown': 'marron', 'cafe': 'marron',
+    'azul': 'azul', 'azules': 'azul', 'blue': 'azul', 'marino': 'azul', 'celeste': 'azul',
+    'roja': 'rojo', 'rojas': 'rojo', 'rojo': 'rojo', 'rojos': 'rojo', 'red': 'rojo',
+    'verde': 'verde', 'verdes': 'verde', 'green': 'verde', 'oliva': 'verde',
+    'gris': 'gris', 'grises': 'gris', 'gray': 'gris', 'grey': 'gris', 'plata': 'gris',
+    'rosada': 'rosado', 'rosadas': 'rosado', 'rosado': 'rosado', 'rosados': 'rosado', 'pink': 'rosado', 'rosa': 'rosado',
+    'amarilla': 'amarillo', 'amarillas': 'amarillo', 'amarillo': 'amarillo', 'yellow': 'amarillo', 'mostaza': 'amarillo',
+    'morada': 'morado', 'morado': 'morado', 'purple': 'morado', 'violeta': 'morado',
+    'vinotinto': 'vinotinto', 'vino': 'vinotinto', 'naranja': 'naranja', 'fucsia': 'fucsia', 'beige': 'beige'
   };
 
   const stopWords = new Set(['dame', 'todas', 'todos', 'las', 'los', 'les', 'de', 'del', 'el', 'la', 'un', 'una', 'unos', 'unas', 'en', 'con', 'para', 'por', 'o', 'y']);
