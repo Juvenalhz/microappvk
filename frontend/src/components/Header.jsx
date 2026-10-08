@@ -1,7 +1,7 @@
 import React from 'react';
-import { RefreshCw, Wifi, WifiOff, DollarSign } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, DollarSign, ShoppingBag } from 'lucide-react';
 
-export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, lastSync }) {
+export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, ticketCount = 0, onOpenTicket }) {
   const rawRate = bcvRate ? Number(bcvRate.tasa) : 0;
   const formattedRate = rawRate > 0 ? (Math.floor(rawRate * 100) / 100).toFixed(2) : '--.--';
 
@@ -29,7 +29,21 @@ export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, lastSy
             <span className="text-xs font-bold">{formattedRate} <span className="text-[10px] font-normal opacity-80">Bs/$</span></span>
           </div>
 
-          {/* Botón Refrescar / Estado Red */}
+          {/* Botón Ticket de Venta activo */}
+          {ticketCount > 0 && (
+            <button
+              onClick={onOpenTicket}
+              className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:bg-amber-500 hover:text-slate-950 transition-all relative active:scale-95"
+              title="Ver Ticket de Cotización"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow">
+                {ticketCount}
+              </span>
+            </button>
+          )}
+
+          {/* Botón Refrescar */}
           <button
             onClick={onRefresh}
             disabled={isSyncing}
@@ -55,3 +69,4 @@ export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, lastSy
     </header>
   );
 }
+

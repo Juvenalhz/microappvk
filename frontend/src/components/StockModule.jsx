@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Search, X, Package, CheckCircle2 } from 'lucide-react';
 import { filterCatalog, tokenizeQuery, normalizeStr, SYNONYMS_MAP } from '../utils/searchEngine';
 
-export default function StockModule({ stockData, bcvRate, searchTerm, setSearchTerm, isLoading }) {
+export default function StockModule({ stockData, bcvRate, searchTerm, setSearchTerm, isLoading, onAddToCart, ticketItems = [], onOpenTicket }) {
   const inputRef = useRef(null);
   const rawTasa = bcvRate ? Number(bcvRate.tasa) : 0;
   const tasa = rawTasa > 0 ? Math.floor(rawTasa * 100) / 100 : 0;
@@ -18,8 +18,11 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
   const filteredData = filterCatalog(stockData, searchTerm);
   const activeTokens = tokenizeQuery(searchTerm);
 
+  const totalTicketUsd = ticketItems.reduce((acc, i) => acc + (i.precio_usd * i.cant), 0);
+  const totalTicketCount = ticketItems.reduce((acc, i) => acc + i.cant, 0);
+
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden p-4 space-y-4 max-w-lg mx-auto w-full">
+    <div className="flex-1 flex flex-col h-full overflow-hidden p-3 sm:p-4 space-y-3.5 max-w-lg mx-auto w-full">
       
       {/* Barra de Búsqueda instantánea con soporte multitérmino */}
       <div className="relative">
@@ -47,6 +50,30 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
         )}
       </div>
 
+      {/* Banner Flotante de Ticket Activo si hay prendas seleccionadas */}
+      {totalTicketCount > 0 && (
+        <div 
+          onClick={onOpenTicket}
+          className="bg-gradient-to-r from-amber-500/20 via-surface-card to-amber-500/10 border border-amber-500/40 rounded-2xl p-2.5 px-3.5 flex items-center justify-between cursor-pointer hover:border-amber-400 transition-all shadow-lg active:scale-98 animate-fade-in"
+        >
+          <div className="flex items-center space-x-2">
+            <span className="bg-amber-500 text-slate-950 font-black text-xs px-2 py-0.5 rounded-full uppercase tracking-wider">
+              {totalTicketCount} {totalTicketCount === 1 ? 'prenda' : 'prendas'}
+            </span>
+            <span className="text-xs font-bold text-white">
+              Ticket: <strong className="text-amber-400 font-mono">${totalTicketUsd.toFixed(2)} USD</strong>
+            </span>
+          </div>
+
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenTicket(); }}
+            className="bg-amber-500 text-slate-950 text-[11px] font-black px-2.5 py-1 rounded-xl shadow hover:bg-amber-400 transition-all"
+          >
+            Ver Detalle 📋
+          </button>
+        </div>
+      )}
+
       {/* Contador de resultados y etiquetas de filtro activo */}
       <div className="flex flex-col space-y-1.5 px-1 text-xs text-slate-400">
         <div className="flex items-center justify-between">
@@ -68,7 +95,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
       </div>
 
       {/* Lista de Modelos (Scrollable con aceleración GPU) */}
-      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 no-scrollbar smooth-scroll pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
+      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 no-scrollbar smooth-scroll pb-[calc(4.5rem+env(safe-area-inset-bottom,16px))]">
         {!filteredData || filteredData.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-surface-card/40 rounded-2xl border border-surface-cardBorder">
             <Package className="w-12 h-12 text-slate-600 mb-2 stroke-[1.5]" />
@@ -117,7 +144,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                 {/* Separador */}
                 <div className="my-3 border-t border-slate-800/80" />
 
-                {/* Variantes por Color y Talla (Semáforo Inteligente y Enfocado) */}
+                {/* Variantes por Color y Talla (Tocar talla para agregar a Cotización) */}
                 <div className="space-y-3">
                   {(() => {
                     // Identificar si la búsqueda actual contiene tokens de color o talla
@@ -136,7 +163,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                     });
                     const hasSizeToken = sizeTokens.length > 0;
 
-                    // Filtrar colores: Si se especificó un color (ej: "marron"), ocultar los demás colores
+                    // Filtrar colores
                     let displayColores = item.colores || [];
                     if (hasColorToken) {
                       displayColores = displayColores.filter(c => {
@@ -150,7 +177,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                       <>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                            {hasColorToken ? 'Color Filtrado:' : 'Disponibilidad por Variantes:'}
+                            {hasColorToken ? 'Color Filtrado:' : 'Tallas (Toca para Cotizar):'}
                           </span>
                           <span className="text-xs font-medium text-slate-300">
                             Total: <strong className="text-white">{item.total_stock} unids.</strong>
@@ -163,7 +190,6 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                             const canonColor = SYNONYMS_MAP[normColor] || normColor;
                             const isColorMatched = hasColorToken && colorTokens.some(t => normColor.includes(t) || canonColor.includes(t) || SYNONYMS_MAP[t] === canonColor);
 
-                            // Si se está buscando una talla específica, ocultar las variantes agotadas (stock 0) para limpiar la vista
                             let visibleTallas = colorGroup.tallas || [];
                             if (hasSizeToken) {
                               const avail = visibleTallas.filter(t => t.stock > 0);
@@ -198,6 +224,20 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                                     const qty = varItem.stock;
                                     const isSizeMatched = hasSizeToken && sizeTokens.includes(normalizeStr(varItem.talla));
 
+                                    const handleSelectVariant = () => {
+                                      if (qty > 0 && onAddToCart) {
+                                        onAddToCart({
+                                          id: `${item.id}-${colorGroup.color}-${varItem.talla}`,
+                                          modelId: item.id,
+                                          nombre: item.nombre,
+                                          color: colorGroup.color,
+                                          talla: varItem.talla,
+                                          precio_usd: item.precio_usd,
+                                          cant: 1
+                                        });
+                                      }
+                                    };
+
                                     let badgeClasses = '';
                                     if (isSizeMatched) {
                                       badgeClasses = 'ring-2 ring-brand-500 scale-105 shadow-md shadow-brand-500/30 ';
@@ -205,32 +245,39 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
 
                                     if (qty > 1) {
                                       return (
-                                        <div 
+                                        <button 
                                           key={varItem.talla}
-                                          className={`${badgeClasses} bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}
+                                          onClick={handleSelectVariant}
+                                          className={`${badgeClasses} bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/30 text-emerald-300 rounded-xl p-2 text-center flex flex-col items-center justify-center transition-all active:scale-95 cursor-pointer relative group`}
+                                          title="Toca para agregar a Cotización"
                                         >
-                                          <span className="font-bold text-sm leading-none">{varItem.talla}</span>
+                                          <span className="font-bold text-sm leading-none flex items-center">
+                                            {varItem.talla}
+                                            <span className="ml-0.5 text-[9px] font-black text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity">+</span>
+                                          </span>
                                           <span className="text-[10px] font-medium opacity-90 mt-1">{qty} dispon.</span>
-                                        </div>
+                                        </button>
                                       );
                                     } else if (qty === 1) {
                                       return (
-                                        <div 
+                                        <button 
                                           key={varItem.talla}
-                                          className={`${badgeClasses} relative bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center`}
+                                          onClick={handleSelectVariant}
+                                          className={`${badgeClasses} relative bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 rounded-xl p-2 text-center flex flex-col items-center justify-center transition-all active:scale-95 cursor-pointer group`}
+                                          title="Toca para agregar a Cotización"
                                         >
                                           <span className="absolute -top-2 bg-amber-500 text-slate-950 font-black text-[8px] px-1.5 rounded-full uppercase tracking-wider">
                                             ¡ÚLTIMA!
                                           </span>
                                           <span className="font-bold text-sm leading-none mt-1">{varItem.talla}</span>
                                           <span className="text-[10px] font-bold text-amber-200 mt-0.5">1 disp.</span>
-                                        </div>
+                                        </button>
                                       );
                                     } else {
                                       return (
                                         <div 
                                           key={varItem.talla}
-                                          className={`${badgeClasses} bg-slate-800/40 border border-slate-800 text-slate-500 rounded-xl p-2 text-center flex flex-col items-center justify-center opacity-60`}
+                                          className={`${badgeClasses} bg-slate-800/40 border border-slate-800 text-slate-500 rounded-xl p-2 text-center flex flex-col items-center justify-center opacity-60 pointer-events-none`}
                                         >
                                           <span className="font-bold text-sm leading-none line-through">{varItem.talla}</span>
                                           <span className="text-[10px] font-medium mt-1">Agotada</span>

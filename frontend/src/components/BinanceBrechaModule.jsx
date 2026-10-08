@@ -143,7 +143,7 @@ ${bsNum > 0 ? `----------------------------------
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-start p-3 sm:p-5 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
+    <div className="flex-1 flex flex-col justify-start p-3 sm:p-5 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-[calc(4.5rem+env(safe-area-inset-bottom,16px))]">
       
       {/* 1. Header Compacto */}
       <div className="flex items-center justify-between bg-surface-card border border-surface-cardBorder rounded-xl px-3.5 py-2.5 shadow-md">

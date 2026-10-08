@@ -5,11 +5,30 @@ import BcvModule from './components/BcvModule';
 import BinanceBrechaModule from './components/BinanceBrechaModule';
 import PagoMovilModule from './components/PagoMovilModule';
 import BottomNav from './components/BottomNav';
+import TicketModal from './components/TicketModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('stock'); // 'stock' | 'bcv' | 'pago'
   const [searchTerm, setSearchTerm] = useState(() => localStorage.getItem('vk_last_search') || '');
   
+  // Estado para el Cotizador / Ticket de Venta desde el Stock
+  const [ticketItems, setTicketItems] = useState([]);
+  const [isTicketOpen, setIsTicketOpen] = useState(false);
+
+  const handleAddToCart = (newItem) => {
+    setTicketItems(prev => {
+      const existingIndex = prev.findIndex(item => item.id === newItem.id);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], cant: updated[existingIndex].cant + 1 };
+        return updated;
+      }
+      return [...prev, newItem];
+    });
+  };
+
+  const totalTicketCount = ticketItems.reduce((acc, i) => acc + i.cant, 0);
+
   // Carga instantánea (0ms) desde cache local al abrir la PWA
   const [stockData, setStockData] = useState(() => {
     try {
@@ -48,7 +67,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
-  // Persistir último término buscado para no perder el contexto al cambiar de pestaña o recargar
+  // Persistir último término buscado
   useEffect(() => {
     if (searchTerm) {
       localStorage.setItem('vk_last_search', searchTerm);
@@ -57,7 +76,7 @@ export default function App() {
     }
   }, [searchTerm]);
 
-  // Escuchar estado de conexión a Internet (Online / Offline)
+  // Escuchar estado de conexión
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -89,9 +108,8 @@ export default function App() {
     }
   }, []);
 
-  // Cargar inventario filtrado por término de búsqueda (search-as-you-type)
+  // Cargar inventario filtrado
   const fetchStock = useCallback(async (query = '') => {
-    // Si no hay datos en pantalla, mostrar indicador de carga; de lo contrario actualizar en segundo plano silenciosamente
     if (!stockData || stockData.length === 0) {
       setIsLoadingStock(true);
     }
@@ -109,10 +127,8 @@ export default function App() {
         setStockData(json.data || []);
         setLastSync(json.last_sync || null);
         
-        // Auto-Verificación en segundo plano no-bloqueante
         setTimeout(() => autoVerifyLowStockModels(json.data || []), 50);
 
-        // Almacenar en localStorage snapshot completo para offline
         if (!query) {
           localStorage.setItem('vk_stock_cache', JSON.stringify(json.data || []));
         }
@@ -141,7 +157,7 @@ export default function App() {
     }
   }, []);
 
-  // Función para re-verificar automáticamente en vivo modelos con 1 unidad (paralelizado en segundo plano)
+  // Auto-verificación en vivo
   const autoVerifyLowStockModels = async (models) => {
     const lowStockModels = models.filter(m => 
       m.variantes && m.variantes.some(v => v.stock === 1)
@@ -149,7 +165,6 @@ export default function App() {
 
     if (lowStockModels.length === 0) return;
 
-    // Ejecutar verificaciones en paralelo sin bloquear el hilo principal
     await Promise.allSettled(
       lowStockModels.map(async (model) => {
         try {
@@ -171,29 +186,25 @@ export default function App() {
     );
   };
 
-  // Re-consultar tasas en vivo cada vez que se entra a la pestaña Brecha o Calculadora
   useEffect(() => {
     if (activeTab === 'binance' || activeTab === 'bcv') {
       fetchBcvRate();
     }
   }, [activeTab, fetchBcvRate]);
 
-  // Carga inicial al montar la app
   useEffect(() => {
     fetchBcvRate();
     fetchStock('');
   }, [fetchBcvRate, fetchStock]);
 
-  // Debounce para la búsqueda en tiempo real
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchStock(searchTerm);
-    }, 150); // 150ms debounce ultra rápido
+    }, 150);
 
     return () => clearTimeout(timer);
   }, [searchTerm, fetchStock]);
 
-  // Refresco manual al presionar el botón de la cabecera (Sincronización en vivo con el ERP)
   const handleRefresh = async () => {
     setIsSyncing(true);
     try {
@@ -205,7 +216,6 @@ export default function App() {
       if (res.ok) {
         const json = await res.json();
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-          // Filtrar con el término de búsqueda actual si existe
           if (searchTerm) {
             const q = searchTerm.toLowerCase();
             const filtered = json.data.filter(m => 
@@ -238,7 +248,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-dvh h-screen w-screen bg-[#0b0f19] text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col min-h-screen h-screen w-full bg-[#0b0f19] text-slate-100 font-sans relative">
       
       {/* Header Fijo */}
       <Header 
@@ -247,6 +257,8 @@ export default function App() {
         isSyncing={isSyncing}
         onRefresh={handleRefresh}
         lastSync={lastSync}
+        ticketCount={totalTicketCount}
+        onOpenTicket={() => setIsTicketOpen(true)}
       />
 
       {/* Contenido Dinámico Según Pestaña Seleccionada */}
@@ -258,6 +270,9 @@ export default function App() {
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             isLoading={isLoadingStock}
+            onAddToCart={handleAddToCart}
+            ticketItems={ticketItems}
+            onOpenTicket={() => setIsTicketOpen(true)}
           />
         )}
 
@@ -276,6 +291,15 @@ export default function App() {
 
       {/* Barra de Navegación Inferior Mobile-First */}
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      {/* Modal / Drawer de Cotización / Ticket de Venta */}
+      <TicketModal
+        isOpen={isTicketOpen}
+        onClose={() => setIsTicketOpen(false)}
+        ticketItems={ticketItems}
+        setTicketItems={setTicketItems}
+        bcvRate={bcvRate}
+      />
 
     </div>
   );

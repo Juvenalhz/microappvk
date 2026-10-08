@@ -35,7 +35,7 @@ export default function PagoMovilModule() {
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
+    <div className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,16px))]">
       
       {/* Encabezado Módulo */}
       <div className="flex items-center justify-between px-1">
