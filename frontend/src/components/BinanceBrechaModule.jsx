@@ -123,7 +123,7 @@ ${bsNum > 0 ? `----------------------------------
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-3 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-2 pb-[calc(3.5rem+env(safe-area-inset-bottom,0.25rem))]">
+    <div className="flex-1 flex flex-col justify-between p-3 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-2 pb-16">
       
       {/* 1. Header Compacto con Botón de Refresco en Vivo */}
       <div className="flex items-center justify-between bg-surface-card border border-surface-cardBorder rounded-xl px-3 py-2 shadow-md">

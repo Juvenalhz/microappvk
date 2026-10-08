@@ -68,7 +68,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
       </div>
 
       {/* Lista de Modelos (Scrollable con aceleración GPU) */}
-      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 no-scrollbar smooth-scroll pb-[calc(4rem+env(safe-area-inset-bottom,0.5rem))]">
+      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 no-scrollbar smooth-scroll pb-16">
         {!filteredData || filteredData.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-surface-card/40 rounded-2xl border border-surface-cardBorder">
             <Package className="w-12 h-12 text-slate-600 mb-2 stroke-[1.5]" />
