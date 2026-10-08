@@ -165,11 +165,19 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                       });
                     }
 
+                    // Si se buscó una talla específica (ej: "s"), mostrar ÚNICAMENTE los grupos de color que tengan esa talla DISPONIBLE (stock > 0)
+                    if (hasSizeToken) {
+                      displayColores = displayColores.filter(c => {
+                        const tallas = Array.isArray(c.tallas) ? c.tallas : [];
+                        return tallas.some(t => Number(t.stock) > 0 && sizeTokens.includes(normalizeStr(t.talla)));
+                      });
+                    }
+
                     return (
                       <>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                            {hasColorToken ? 'Color Filtrado:' : 'Tallas (Toca para Cotizar):'}
+                            {hasColorToken || hasSizeToken ? 'Colores / Tallas Filtradas:' : 'Tallas (Toca para Cotizar):'}
                           </span>
                           <span className="text-xs font-medium text-slate-300">
                             Total: <strong className="text-white">{item.total_stock} unids.</strong>
@@ -184,8 +192,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
 
                             let visibleTallas = colorGroup.tallas || [];
                             if (hasSizeToken) {
-                              const avail = visibleTallas.filter(t => t.stock > 0 && sizeTokens.includes(normalizeStr(t.talla)));
-                              if (avail.length > 0) visibleTallas = avail;
+                              visibleTallas = visibleTallas.filter(t => Number(t.stock) > 0 && sizeTokens.includes(normalizeStr(t.talla)));
                             }
 
                             return (
