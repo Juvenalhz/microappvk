@@ -47,30 +47,39 @@ export default function TicketModal({ isOpen, onClose, ticketItems, setTicketIte
     setTimeout(() => setCopiedMode(null), 2000);
   };
 
+  // Helper para convertir nombre a Mayúscula Inicial (Title Case)
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   // Copiar el reporte detallado formateado para WhatsApp
   const handleCopyFullReport = () => {
     if (ticketItems.length === 0) return;
 
-    const itemsText = ticketItems.map((item, idx) => {
-      const itemBs = (item.precio_usd * item.cant * tasa).toLocaleString('es-VE', { minimumFractionDigits: 2 });
+    const itemsText = ticketItems.map((item) => {
+      const formattedName = toTitleCase(item.nombre);
+      const colorText = item.color ? item.color.toUpperCase() : 'ÚNICO';
       return (
-`👕 *${item.nombre}*
-   • Color: ${item.color || 'Único'} | Talla: ${item.talla}
-   • Cantidad: ${item.cant} x $${item.precio_usd.toFixed(2)} USD (≈ ${itemBs} Bs)`
+`${formattedName}
+• Color: ${colorText} | Talla: ${item.talla}
+• Cantidad: ${item.cant} x $${item.precio_usd.toFixed(2)} USD`
       );
     }).join('\n\n');
 
     const fullReport = 
-`🧾 *COTIZACIÓN DE COMPRA - TIENDAS VK*
+`📋 *DETALLADO*
 ----------------------------------
 ${itemsText}
 ----------------------------------
 📦 Total prendas: ${totalCount}
 💵 Total USD: $${totalUsd.toFixed(2)} USD
 🏛️ Tasa BCV Oficial: ${tasa.toFixed(2)} Bs
-🇻🇪 *TOTAL A PAGAR: ${totalBsFormatted} Bs*
-----------------------------------
-¡Gracias por preferir Tiendas VK! 🛍️`;
+🇻🇪 *TOTAL A PAGAR: ${totalBsFormatted} Bs*`;
 
     navigator.clipboard.writeText(fullReport);
     setCopiedMode('full');

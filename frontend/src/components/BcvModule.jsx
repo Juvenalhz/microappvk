@@ -21,7 +21,7 @@ export default function BcvModule({ bcvRate }) {
     maximumFractionDigits: 2
   });
 
-  // Agregar prenda / monto a la lista de suma
+  // Agregar monto a la suma
   const handleAddItem = () => {
     if (currentInputNum > 0) {
       setItems(prev => [...prev, currentInputNum]);
@@ -29,7 +29,7 @@ export default function BcvModule({ bcvRate }) {
     }
   };
 
-  // Eliminar una prenda específica de la lista
+  // Eliminar un monto específico de la lista
   const handleRemoveItem = (index) => {
     setItems(prev => prev.filter((_, i) => i !== index));
   };
@@ -82,45 +82,27 @@ export default function BcvModule({ bcvRate }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [usdInput, currentInputNum]);
 
-  // Copiar monto o reporte desglose al portapapeles
-  const handleCopyReport = () => {
+  // Copiar únicamente el total en Bolívares
+  const handleCopyBsOnly = () => {
     if (totalUsd <= 0) return;
-
-    let textToCopy = '';
-    if (items.length > 0) {
-      const itemsListText = items.map((price, i) => `• Prenda ${i + 1}: $${price.toFixed(2)}`).join('\n');
-      const currentPendingText = currentInputNum > 0 ? `\n• Prenda ${items.length + 1}: $${currentInputNum.toFixed(2)}` : '';
-      
-      textToCopy = 
-`🛒 *CÁLCULO DE VENTA BCV* (${items.length + (currentInputNum > 0 ? 1 : 0)} prendas)
-----------------------------------
-${itemsListText}${currentPendingText}
-----------------------------------
-💵 *Total USD:* $${totalUsd.toFixed(2)}
-🏛️ *Tasa BCV:* ${tasa.toFixed(2)} Bs
-🇻🇪 *Total a Pagar:* ${totalBsFormatted} Bs`;
-    } else {
-      textToCopy = `${totalBsFormatted} Bs.`;
-    }
-
-    navigator.clipboard.writeText(textToCopy);
+    navigator.clipboard.writeText(`${totalBsFormatted} Bs.`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const totalPrendasCount = items.length + (currentInputNum > 0 ? 1 : 0);
+  const totalItemsCount = items.length + (currentInputNum > 0 ? 1 : 0);
 
   return (
     <div className="flex-1 flex flex-col justify-start p-3 sm:p-5 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3.5 pb-[calc(4.5rem+env(safe-area-inset-bottom,16px))]">
       
       {/* Grid Responsivo: 1 columna en móvil, 2 columnas en Desktop Web (md:) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 md:gap-6 items-start">
         
-        {/* COLUMNA IZQUIERDA: Tarjeta Principal y Lista de Suma de Prendas */}
+        {/* COLUMNA IZQUIERDA: Tarjeta Principal Fija de Cálculo */}
         <div className="space-y-3">
           
           {/* TARJETA HERO DE CÁLCULO */}
-          <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 sm:p-5 shadow-xl shadow-black/30 relative overflow-hidden space-y-3">
+          <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 sm:p-5 shadow-xl shadow-black/30 relative overflow-hidden space-y-2.5">
             
             {/* Adorno sutil de fondo */}
             <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-gold/10 rounded-full blur-2xl pointer-events-none" />
@@ -136,14 +118,14 @@ ${itemsListText}${currentPendingText}
               </span>
             </div>
 
-            {/* Display Principal: Monto USD y Conteo de Prendas */}
-            <div className="py-1">
+            {/* Display Principal: Monto USD */}
+            <div className="py-0.5">
               <div className="flex items-center justify-between text-xs text-slate-400 font-medium mb-0.5">
                 <span>Total Acumulado (USD):</span>
-                {totalPrendasCount > 0 && (
+                {totalItemsCount > 0 && (
                   <span className="bg-slate-800 text-amber-400 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center space-x-1 border border-slate-700">
                     <ShoppingBag className="w-3 h-3 text-amber-400" />
-                    <span>{totalPrendasCount} {totalPrendasCount === 1 ? 'prenda' : 'prendas'}</span>
+                    <span>{totalItemsCount} {totalItemsCount === 1 ? 'monto' : 'montos'}</span>
                   </span>
                 )}
               </div>
@@ -154,21 +136,52 @@ ${itemsListText}${currentPendingText}
               </div>
             </div>
 
+            {/* Lista compacta scrolleable de montos sumados dentro de la tarjeta (evita redimensionar el teclado en móvil) */}
+            {items.length > 0 && (
+              <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-2 space-y-1 animate-fade-in">
+                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 px-1">
+                  <span>Montos ingresados:</span>
+                  <button
+                    onClick={handleClearAll}
+                    className="text-red-400 hover:text-red-300 font-semibold"
+                  >
+                    Vaciar todo
+                  </button>
+                </div>
+                <div className="max-h-20 overflow-y-auto no-scrollbar space-y-1 pr-1">
+                  {items.map((price, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs px-2 py-0.5 bg-slate-900/60 rounded-lg">
+                      <span className="text-slate-400 text-[11px]">Monto {idx + 1}:</span>
+                      <div className="flex items-center space-x-1.5 font-mono">
+                        <span className="text-emerald-400 font-bold">${price.toFixed(2)}</span>
+                        <button
+                          onClick={() => handleRemoveItem(idx)}
+                          className="text-slate-500 hover:text-red-400"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="my-1 border-t border-slate-800" />
 
-            {/* Total a Pagar en Bolívares */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-1 pb-1 gap-2">
+            {/* Total a Pagar en Bolívares + Botón Copiar Solo Bs */}
+            <div className="flex items-center justify-between pt-1 gap-2">
               <div className="min-w-0 flex-1">
                 <span className="text-xs text-slate-400 font-medium block mb-0.5">Total a Pagar en Bs:</span>
-                <div className="text-2xl sm:text-3xl font-black text-brand-gold font-mono tracking-tight break-all">
+                <div className="text-2xl sm:text-3xl font-black text-brand-gold font-mono tracking-tight break-all leading-tight">
                   {totalBsFormatted} <span className="text-xs sm:text-sm font-bold text-slate-400">Bs</span>
                 </div>
               </div>
 
               <button
-                onClick={handleCopyReport}
+                onClick={handleCopyBsOnly}
                 disabled={totalUsd <= 0}
-                className={`px-3.5 py-2 rounded-xl flex items-center justify-center space-x-1.5 text-xs font-bold transition-all shadow-md shrink-0 active:scale-95 ${
+                className={`px-4 py-2.5 rounded-xl flex items-center justify-center space-x-1.5 text-xs font-bold transition-all shadow-md shrink-0 active:scale-95 ${
                   copied
                     ? 'bg-emerald-500 text-white'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
@@ -182,7 +195,7 @@ ${itemsListText}${currentPendingText}
                 ) : (
                   <>
                     <Copy className="w-4 h-4 text-brand-gold" />
-                    <span>{items.length > 0 ? 'Copiar Ticket' : 'Copiar Bs'}</span>
+                    <span>Copiar Bs</span>
                   </>
                 )}
               </button>
@@ -190,58 +203,14 @@ ${itemsListText}${currentPendingText}
 
           </div>
 
-          {/* LISTA / TICKET DE PRENDAS AGREGADAS */}
-          {items.length > 0 && (
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2 animate-fade-in">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-300 px-1">
-                <span className="flex items-center space-x-1 text-amber-400">
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>Desglose de prendas sumadas:</span>
-                </span>
-                <button
-                  onClick={handleClearAll}
-                  className="text-[10px] text-red-400 hover:text-red-300 font-semibold flex items-center space-x-1 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Vaciar Lista</span>
-                </button>
-              </div>
-
-              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 no-scrollbar">
-                {items.map((price, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between bg-slate-950/70 px-3 py-1.5 rounded-xl border border-slate-800/80 text-xs"
-                  >
-                    <span className="text-slate-300 font-medium">
-                      Prenda {idx + 1}:
-                    </span>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-mono font-bold text-emerald-400">
-                        ${price.toFixed(2)} USD
-                      </span>
-                      <button
-                        onClick={() => handleRemoveItem(idx)}
-                        className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-all"
-                        title="Eliminar esta prenda"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
         </div>
 
-        {/* COLUMNA DERECHA: Teclado Numérico + Botón Sumar Prenda */}
-        <div className="space-y-2.5">
+        {/* COLUMNA DERECHA: Teclado Numérico Fijo + Botón Sumar (+) */}
+        <div className="space-y-2">
           
           {/* Indicador de entrada actual */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2 flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-medium">Ingresando prenda:</span>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs">
+            <span className="text-slate-400 font-medium">Ingresando monto:</span>
             <span className="font-mono font-extrabold text-white text-base">
               ${usdInput || '0'} <span className="text-xs text-slate-400 font-normal">USD</span>
             </span>
@@ -255,7 +224,7 @@ ${itemsListText}${currentPendingText}
                   <button
                     key={key}
                     onClick={() => handleKeyPress('DEL')}
-                    className="py-3 sm:py-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-touch active:scale-95 shadow"
+                    className="py-2.5 sm:py-3 rounded-2xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-touch active:scale-95 shadow"
                   >
                     <Delete className="w-5 h-5" />
                   </button>
@@ -266,7 +235,7 @@ ${itemsListText}${currentPendingText}
                 <button
                   key={key}
                   onClick={() => handleKeyPress(key)}
-                  className="py-3 sm:py-3.5 rounded-2xl bg-surface-card border border-surface-cardBorder text-white font-extrabold text-xl shadow transition-touch active:scale-95 active:bg-slate-700"
+                  className="py-2.5 sm:py-3 rounded-2xl bg-surface-card border border-surface-cardBorder text-white font-extrabold text-lg sm:text-xl shadow transition-touch active:scale-95 active:bg-slate-700"
                 >
                   {key}
                 </button>
@@ -274,24 +243,24 @@ ${itemsListText}${currentPendingText}
             })}
           </div>
 
-          {/* Botones de Acción: Sumar Prenda (+) y Limpiar */}
+          {/* Botones de Acción: Sumar (+) y Limpiar */}
           <div className="grid grid-cols-3 gap-2 pt-0.5">
             <button
               onClick={handleAddItem}
               disabled={currentInputNum <= 0}
-              className={`col-span-2 py-3 rounded-2xl font-black text-sm flex items-center justify-center space-x-2 transition-all shadow-lg active:scale-95 ${
+              className={`col-span-2 py-2.5 rounded-2xl font-black text-sm flex items-center justify-center space-x-2 transition-all shadow-lg active:scale-95 ${
                 currentInputNum > 0
                   ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-amber-500/20'
                   : 'bg-slate-800/60 text-slate-500 border border-slate-800'
               }`}
             >
               <Plus className="w-5 h-5 stroke-[3]" />
-              <span>Sumar Prenda (+)</span>
+              <span>Sumar (+)</span>
             </button>
 
             <button
               onClick={handleClearAll}
-              className="col-span-1 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs font-bold hover:text-white transition-all active:scale-95"
+              className="col-span-1 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs font-bold hover:text-white transition-all active:scale-95"
             >
               Limpiar
             </button>
@@ -304,4 +273,5 @@ ${itemsListText}${currentPendingText}
     </div>
   );
 }
+
 
