@@ -171,6 +171,13 @@ export default function App() {
     );
   };
 
+  // Re-consultar tasas en vivo cada vez que se entra a la pestaña Brecha o Calculadora
+  useEffect(() => {
+    if (activeTab === 'binance' || activeTab === 'bcv') {
+      fetchBcvRate();
+    }
+  }, [activeTab, fetchBcvRate]);
+
   // Carga inicial al montar la app
   useEffect(() => {
     fetchBcvRate();
@@ -259,7 +266,7 @@ export default function App() {
         )}
 
         {activeTab === 'binance' && (
-          <BinanceBrechaModule bcvRate={bcvRate} />
+          <BinanceBrechaModule bcvRate={bcvRate} onRefreshRates={fetchBcvRate} />
         )}
 
         {activeTab === 'pago' && (

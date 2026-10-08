@@ -6,24 +6,26 @@ import {
   Delete, 
   ShieldAlert, 
   Percent,
-  ArrowUpRight
+  ArrowUpRight,
+  RefreshCw
 } from 'lucide-react';
 
-export default function BinanceBrechaModule({ bcvRate }) {
+export default function BinanceBrechaModule({ bcvRate, onRefreshRates }) {
   // Tasas oficiales y de mercado auto-cargadas desde el BFF / API
   const defaultBcv = bcvRate?.tasa ? Number(bcvRate.tasa).toFixed(2) : '873.87';
   const defaultBinance = bcvRate?.binance ? Number(bcvRate.binance).toFixed(2) : '1007.74';
 
-  // Monto en Bs inicia VACÍO como solicitó el usuario
+  // Monto en Bs inicia VACÍO
   const [montoBs, setMontoBs] = useState('');
   const [tasaBinance, setTasaBinance] = useState(defaultBinance);
   const [tasaBcv, setTasaBcv] = useState(defaultBcv);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Campo activo para el teclado táctil: 'bs' | 'binance' | 'bcv'
   const [activeInput, setActiveInput] = useState('bs');
   const [copied, setCopied] = useState(false);
 
-  // Actualizar tasas si el BFF envía valores nuevos
+  // Auto-actualizar tasas cuando bcvRate cambie
   useEffect(() => {
     if (bcvRate?.tasa) {
       setTasaBcv(Number(bcvRate.tasa).toFixed(2));
@@ -32,6 +34,15 @@ export default function BinanceBrechaModule({ bcvRate }) {
       setTasaBinance(Number(bcvRate.binance).toFixed(2));
     }
   }, [bcvRate]);
+
+  // Manejador para refrescar manualmente las tasas desde la API
+  const handleRefreshClick = async () => {
+    if (onRefreshRates) {
+      setIsRefreshing(true);
+      await onRefreshRates();
+      setTimeout(() => setIsRefreshing(false), 600);
+    }
+  };
 
   // Valores numéricos limpios
   const bsNum = parseFloat(montoBs) || 0;
@@ -44,7 +55,7 @@ export default function BinanceBrechaModule({ bcvRate }) {
   const perdidaUsd = usdBcv - usdBinance;
   const porcentajePerdida = usdBcv > 0 ? (perdidaUsd / usdBcv) * 100 : 0;
   
-  // Brecha porcentual de la tasa Binance sobre la tasa BCV (se calcula con o sin monto en Bs)
+  // Brecha porcentual de la tasa Binance sobre la tasa BCV
   const brechaTasaPorcentaje = bcvNum > 0 && binanceNum > 0 
     ? ((binanceNum - bcvNum) / bcvNum) * 100 
     : 0;
@@ -58,7 +69,7 @@ export default function BinanceBrechaModule({ bcvRate }) {
     return num.toLocaleString('es-VE', { maximumFractionDigits: 2 });
   };
 
-  // Teclado táctil
+  // Teclado táctil para editar Monto Bs, Tasa Binance o Tasa BCV
   const handleKeyPress = (val) => {
     const getValue = () => {
       if (activeInput === 'bs') return montoBs;
@@ -114,7 +125,7 @@ ${bsNum > 0 ? `----------------------------------
   return (
     <div className="flex-1 flex flex-col justify-between p-3 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-2 pb-[calc(3.5rem+env(safe-area-inset-bottom,0.25rem))]">
       
-      {/* 1. Header Compacto */}
+      {/* 1. Header Compacto con Botón de Refresco en Vivo */}
       <div className="flex items-center justify-between bg-surface-card border border-surface-cardBorder rounded-xl px-3 py-2 shadow-md">
         <div className="flex items-center space-x-2">
           <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
@@ -122,24 +133,34 @@ ${bsNum > 0 ? `----------------------------------
           </div>
           <div>
             <h2 className="text-xs font-black text-white leading-tight">Brecha Cambiaria BCV vs Binance</h2>
-            <p className="text-[10px] text-slate-400">API En Vivo (BCV & Binance P2P)</p>
+            <p className="text-[10px] text-slate-400">Consulta en vivo (BCV & Binance P2P)</p>
           </div>
         </div>
 
-        <button
-          onClick={handleCopyReport}
-          className={`px-2.5 py-1 rounded-lg flex items-center space-x-1 text-[11px] font-bold transition-all shadow ${
-            copied
-              ? 'bg-emerald-500 text-white'
-              : 'bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 active:scale-95'
-          }`}
-        >
-          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-amber-400" />}
-          <span>{copied ? '¡Copiado!' : 'Reporte'}</span>
-        </button>
+        <div className="flex items-center space-x-1.5">
+          <button
+            onClick={handleRefreshClick}
+            title="Refrescar tasas en vivo"
+            className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-amber-400 border border-slate-700 active:scale-95 transition-all"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+          </button>
+
+          <button
+            onClick={handleCopyReport}
+            className={`px-2.5 py-1 rounded-lg flex items-center space-x-1 text-[11px] font-bold transition-all shadow ${
+              copied
+                ? 'bg-emerald-500 text-white'
+                : 'bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 active:scale-95'
+            }`}
+          >
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-amber-400" />}
+            <span>{copied ? '¡Copiado!' : 'Reporte'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* 2. TARJETA HERO DE RESULTADOS (SIEMPRE VISIBLE CON BRECHA CALCULADA DE INMEDIATO) */}
+      {/* 2. TARJETA HERO DE RESULTADOS (CALCULADA DE INMEDIATO) */}
       <div className="bg-gradient-to-br from-surface-card via-slate-900 to-[#121827] border border-amber-500/30 rounded-2xl p-3 shadow-xl space-y-2.5 relative overflow-hidden">
         
         {/* Glow sutil */}
@@ -202,13 +223,13 @@ ${bsNum > 0 ? `----------------------------------
           </div>
         ) : (
           <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800 text-center text-xs text-slate-400 font-medium">
-            💡 Ingresa un monto en Bs con el teclado para calcular el total recibido en Binance.
+            💡 Ingresa un monto en Bs para calcular los dólares netos recibidos en Binance.
           </div>
         )}
 
       </div>
 
-      {/* 3. Selector de Inputs (Monto Bs [VACÍO], Tasa Binance [AUTO], Tasa BCV [AUTO]) */}
+      {/* 3. Selector de Inputs MODIFICABLES (Toca cualquier campo para editar con el teclado táctil) */}
       <div className="grid grid-cols-3 gap-1.5">
         {/* Input Monto Bs */}
         <button
@@ -228,7 +249,7 @@ ${bsNum > 0 ? `----------------------------------
           )}
         </button>
 
-        {/* Input Tasa Binance */}
+        {/* Input Tasa Binance Modificable */}
         <button
           onClick={() => setActiveInput('binance')}
           className={`p-2 rounded-xl text-left border transition-all relative overflow-hidden ${
@@ -237,7 +258,10 @@ ${bsNum > 0 ? `----------------------------------
               : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
           }`}
         >
-          <div className="text-[9px] font-bold uppercase tracking-wider text-amber-400 mb-0.5">Tasa Binance</div>
+          <div className="text-[9px] font-bold uppercase tracking-wider text-amber-400 mb-0.5 flex items-center justify-between">
+            <span>Tasa Binance</span>
+            <span className="text-[8px] opacity-75">✏️</span>
+          </div>
           <div className="text-xs sm:text-sm font-black font-mono text-white leading-tight">
             {binanceNum > 0 ? binanceNum.toFixed(2) : '0'}
           </div>
@@ -246,7 +270,7 @@ ${bsNum > 0 ? `----------------------------------
           )}
         </button>
 
-        {/* Input Tasa BCV */}
+        {/* Input Tasa BCV Modificable */}
         <button
           onClick={() => setActiveInput('bcv')}
           className={`p-2 rounded-xl text-left border transition-all relative overflow-hidden ${
@@ -255,7 +279,10 @@ ${bsNum > 0 ? `----------------------------------
               : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
           }`}
         >
-          <div className="text-[9px] font-bold uppercase tracking-wider text-blue-400 mb-0.5">Tasa BCV</div>
+          <div className="text-[9px] font-bold uppercase tracking-wider text-blue-400 mb-0.5 flex items-center justify-between">
+            <span>Tasa BCV</span>
+            <span className="text-[8px] opacity-75">✏️</span>
+          </div>
           <div className="text-xs sm:text-sm font-black font-mono text-white leading-tight">
             {bcvNum > 0 ? bcvNum.toFixed(2) : '0'}
           </div>
@@ -265,7 +292,7 @@ ${bsNum > 0 ? `----------------------------------
         </button>
       </div>
 
-      {/* 4. TECLADO NUMÉRICO TÁCTIL ULTRA COMPACTO */}
+      {/* 4. TECLADO NUMÉRICO TÁCTIL COMPACTO */}
       <div className="grid grid-cols-3 gap-1.5">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'].map((key) => {
           if (key === 'DEL') {
@@ -292,7 +319,7 @@ ${bsNum > 0 ? `----------------------------------
         })}
       </div>
 
-      {/* Botón Borrar Todo */}
+      {/* Botón Borrar Todo / Limpiar Campo */}
       <button
         onClick={() => handleKeyPress('CLEAR')}
         className="w-full py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 text-[11px] font-semibold hover:text-white transition-all"
