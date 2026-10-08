@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Delete, Copy, Check, DollarSign, Calculator, Plus } from 'lucide-react';
 
 export default function BcvModule({ bcvRate }) {
@@ -8,14 +8,14 @@ export default function BcvModule({ bcvRate }) {
   const rawTasa = bcvRate ? Number(bcvRate.tasa) : 36.50;
   const tasa = Math.floor(rawTasa * 100) / 100;
 
-  // Calculo de monto en USD
+  // Cálculo de monto en USD
   const numericUsd = parseFloat(usdInput) || 0;
   const totalBs = (numericUsd * tasa).toLocaleString('es-VE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 
-  // Manejo de teclado táctil
+  // Manejo de teclado táctil y físico
   const handleKeyPress = (val) => {
     if (val === 'DEL') {
       setUsdInput(prev => prev.slice(0, -1));
@@ -35,13 +35,25 @@ export default function BcvModule({ bcvRate }) {
     }
   };
 
-  // Botones de acceso rápido (+$20, +$25, +$30, +$50)
-  const handleAddPreset = (amount) => {
-    const current = parseFloat(usdInput) || 0;
-    const updated = (current + amount).toFixed(2);
-    // Eliminar decimales innecesarios .00 si es entero
-    setUsdInput(updated.endsWith('.00') ? String(parseInt(updated)) : updated);
-  };
+  // Soporte para teclado físico de PC / Laptop
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        handleKeyPress(e.key);
+      } else if (e.key === '.' || e.key === ',') {
+        handleKeyPress('.');
+      } else if (e.key === 'Backspace') {
+        handleKeyPress('DEL');
+      } else if (e.key === 'Escape') {
+        handleKeyPress('CLEAR');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [usdInput]);
 
   // Copiar monto en Bs
   const handleCopyBs = () => {
@@ -53,16 +65,16 @@ export default function BcvModule({ bcvRate }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-16">
+    <div className="flex-1 flex flex-col justify-between p-4 max-w-lg md:max-w-xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-16">
       
       {/* Tarjeta de Tasa y Display de Cálculo */}
-      <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 pb-5 shadow-xl shadow-black/30 relative overflow-hidden">
+      <div className="bg-surface-card border border-surface-cardBorder rounded-3xl p-4 sm:p-5 pb-5 shadow-xl shadow-black/30 relative overflow-hidden">
         
         {/* Adorno de fondo */}
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-gold/10 rounded-full blur-2xl pointer-events-none" />
 
         {/* Tasa Oficial Header */}
-        <div className="flex items-center justify-between mb-2 text-xs text-slate-400">
+        <div className="flex items-center justify-between mb-2 text-xs sm:text-sm text-slate-400">
           <span className="flex items-center space-x-1 font-semibold text-slate-300">
             <Calculator className="w-4 h-4 text-brand-gold" />
             <span>Tasa Oficial BCV</span>
@@ -75,7 +87,7 @@ export default function BcvModule({ bcvRate }) {
         {/* Campo USD Ingresado */}
         <div className="text-right py-1">
           <div className="text-xs text-slate-400 font-medium mb-0.5">Monto en Divisas (USD):</div>
-          <div className="text-3xl font-black text-white font-mono flex items-center justify-end">
+          <div className="text-3xl sm:text-4xl font-black text-white font-mono flex items-center justify-end">
             <span className="text-emerald-400 mr-1">$</span>
             {usdInput || '0'}
           </div>
@@ -83,19 +95,19 @@ export default function BcvModule({ bcvRate }) {
 
         <div className="my-2.5 border-t border-slate-800" />
 
-        {/* Resultado Conversión en Bolívares */}
-        <div className="flex items-center justify-between pt-1 pb-1">
-          <div>
-            <span className="text-xs text-slate-400 font-medium">Total a Pagar en Bs:</span>
-            <div className="text-2xl font-black text-brand-gold font-mono tracking-tight">
-              {totalBs} <span className="text-xs font-bold text-slate-400">Bs</span>
+        {/* Resultado Conversión en Bolívares (Formato amplio sin cortes) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-1 pb-1 gap-2">
+          <div className="min-w-0 flex-1">
+            <span className="text-xs text-slate-400 font-medium block mb-0.5">Total a Pagar en Bs:</span>
+            <div className="text-2xl sm:text-3xl font-black text-brand-gold font-mono tracking-tight break-all">
+              {totalBs} <span className="text-xs sm:text-sm font-bold text-slate-400">Bs</span>
             </div>
           </div>
 
           <button
             onClick={handleCopyBs}
             disabled={numericUsd <= 0}
-            className={`px-3.5 py-2.5 rounded-xl flex items-center space-x-1.5 text-xs font-bold transition-all shadow-md active:scale-95 ${
+            className={`px-3.5 py-2.5 rounded-xl flex items-center justify-center space-x-1.5 text-xs font-bold transition-all shadow-md shrink-0 active:scale-95 ${
               copied
                 ? 'bg-emerald-500 text-white'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
