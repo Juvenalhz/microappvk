@@ -212,31 +212,50 @@ function parseFinapartnerItem(item) {
   const modelId = (item.modelId || item.modelo_id || item.model || item.groupCode || item._id || item.code || item.SKU || item.sku || nombre).toUpperCase();
   const categoria = item.category || item.categoria || item.categoryName || 'General';
   
-  // Extraer exclusivamente el precio de VENTA al público (sellingPrice / salePrice / retailPrice / precio_venta / pvp)
-  // evitando confusiones con precio de lista (MSRP) o costo
+  // Extraer exclusivamente el precio de VENTA al público para el canal de ventas "Tienda"
   let precioUsd = 0;
 
-  // 1. Prioridad absoluta: precio de venta activo en raíz del producto ERP
-  const rootSellingCandidates = [
-    item.sellingPrice,
-    item.salePrice,
-    item.precio_venta,
-    item.pvp,
-    item.retailPrice,
-    item.precio_usd,
-    item.price_usd,
-    item.finalPrice,
-    item.specialPrice
-  ];
+  // 1. PRIORIDAD ABSOLUTA: Precio configurado en FINA ERP para el Canal de Ventas "Tienda" (Store Sales Channel)
+  if (Array.isArray(item.salesChannels) && item.salesChannels.length > 0) {
+    const tiendaChannel = item.salesChannels.find(ch => ch.name && ch.name.toLowerCase().includes('tienda'));
+    const targetChannel = tiendaChannel || item.salesChannels[0];
 
-  for (const cand of rootSellingCandidates) {
-    if (cand !== undefined && cand !== null && Number(cand) > 0) {
-      precioUsd = Number(cand);
-      break;
+    if (targetChannel && Array.isArray(targetChannel.items) && targetChannel.items.length > 0) {
+      for (const chItem of targetChannel.items) {
+        if (chItem.enable !== false) {
+          const cand = chItem.sellingPrice || chItem.salePrice || chItem.precio_venta || chItem.price || chItem.precio_usd;
+          if (cand !== undefined && cand !== null && Number(cand) > 0) {
+            precioUsd = Number(cand);
+            break;
+          }
+        }
+      }
     }
   }
 
-  // 2. Si no se encontró en la raíz, buscar precio de venta activo en las sub-variantes
+  // 2. Si no se encontró en salesChannels, buscar precio de venta en la raíz del producto ERP
+  if (precioUsd === 0) {
+    const rootSellingCandidates = [
+      item.sellingPrice,
+      item.salePrice,
+      item.precio_venta,
+      item.pvp,
+      item.retailPrice,
+      item.precio_usd,
+      item.price_usd,
+      item.finalPrice,
+      item.specialPrice
+    ];
+
+    for (const cand of rootSellingCandidates) {
+      if (cand !== undefined && cand !== null && Number(cand) > 0) {
+        precioUsd = Number(cand);
+        break;
+      }
+    }
+  }
+
+  // 3. Si no se encontró en la raíz, buscar precio de venta activo en las sub-variantes
   if (precioUsd === 0 && Array.isArray(item.items) && item.items.length > 0) {
     for (const sub of item.items) {
       const subSellingCandidates = [
@@ -259,14 +278,14 @@ function parseFinapartnerItem(item) {
     }
   }
 
-  // 3. Fallback a 'price' sólo si no existe ningún precio de venta activo explícito
+  // 4. Fallback a 'price' sólo si no existe ningún precio de venta activo explícito
   if (precioUsd === 0) {
-    precioUsd = Number(item.sellingPrice || item.salePrice || item.precio_venta || item.precio_usd || item.price || 0);
+    precioUsd = Number(item.price || 0);
   }
 
-  // Regla especial de precio para promociones retail VK (Camisa Prestige = $30.00 USD)
+  // Regla especial para Camisa Prestige sólo por nombre exacto si no viene en salesChannels
   const normItemName = nombre.toLowerCase();
-  if (normItemName.includes('camisa prestige') || (modelId && modelId.includes('6AA4025A'))) {
+  if (precioUsd === 45 && normItemName === 'camisa prestige') {
     precioUsd = 30;
   }
 
