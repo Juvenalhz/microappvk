@@ -11,6 +11,10 @@ export const COLOR_CANONICAL_SET = new Set([
 export const SYNONYMS_MAP = {
   'camisa': 'camisa',
   'camisas': 'camisa',
+  'chemise': 'camisa',
+  'chemises': 'camisa',
+  'sobrecamisa': 'camisa',
+  'sobrecamisas': 'camisa',
   'shirt': 'camisa',
   'shirts': 'camisa',
   'tshirt': 'franela',
@@ -130,12 +134,25 @@ export function matchesAllTokens(item, tokens) {
     }
   }
 
-  // 1. Verificar que los generalTokens (nombre, categoría, ID) coincidan
+  const itemSearchText = normalizeStr(item.search_text);
+
+  // 1. Verificar que los generalTokens (nombre, categoría, ID, search_text) coincidan
   const matchesGeneral = generalTokens.every(token => {
-    return itemCategoria.includes(token) || 
-           itemCategoriaCanon.includes(token) || 
-           itemNombre.includes(token) || 
-           itemId.includes(token);
+    if (itemCategoria.includes(token) || 
+        itemCategoriaCanon.includes(token) || 
+        itemNombre.includes(token) || 
+        itemId.includes(token) ||
+        itemSearchText.includes(token)) {
+      return true;
+    }
+
+    // Coincidencia flexible para prendas superiores (camisa / chemise / franela / top / set)
+    if ((token === 'camisa' || token === 'chemise' || token === 'franela') && 
+        (itemCategoria.includes('chemise') || itemCategoria.includes('camisa') || itemCategoria.includes('franela') || itemCategoria.includes('set') || itemNombre.includes('camisa') || itemNombre.includes('chemise'))) {
+      return true;
+    }
+
+    return false;
   });
 
   if (!matchesGeneral) return false;

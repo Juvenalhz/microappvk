@@ -264,6 +264,12 @@ function parseFinapartnerItem(item) {
     precioUsd = Number(item.sellingPrice || item.salePrice || item.precio_venta || item.precio_usd || item.price || 0);
   }
 
+  // Regla especial de precio para promociones retail VK (Camisa Prestige = $30.00 USD)
+  const normItemName = nombre.toLowerCase();
+  if (normItemName.includes('camisa prestige') || (modelId && modelId.includes('6AA4025A'))) {
+    precioUsd = 30;
+  }
+
   // Mapa de color -> mapa de talla
   const colorMap = new Map();
   const sizeOrder = { 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6 };
@@ -529,7 +535,7 @@ async function handleGetStock(url, env) {
 
   // Synonyms map para búsqueda avanzada en Worker API
   const SYNONYMS_MAP = {
-    'camisa': 'camisa', 'camisas': 'camisa', 'shirt': 'camisa', 'shirts': 'camisa',
+    'camisa': 'camisa', 'camisas': 'camisa', 'chemise': 'camisa', 'chemises': 'camisa', 'sobrecamisa': 'camisa', 'sobrecamisas': 'camisa', 'shirt': 'camisa', 'shirts': 'camisa',
     'tshirt': 'franela', 't-shirt': 'franela', 'remera': 'franela', 'playera': 'franela', 'franela': 'franela', 'franelas': 'franela',
     'pantalon': 'pantalon', 'pantalones': 'pantalon', 'jean': 'pantalon', 'jeans': 'pantalon', 'denim': 'pantalon', 'pants': 'pantalon',
     'chaqueta': 'chaqueta', 'chaquetas': 'chaqueta', 'sueter': 'chaqueta', 'hoodie': 'chaqueta', 'abrigo': 'chaqueta',
@@ -561,6 +567,7 @@ async function handleGetStock(url, env) {
         const itemCat = normalizeText(model.categoria);
         const itemCatCanon = SYNONYMS_MAP[itemCat] || itemCat;
         const itemId = normalizeText(model.id);
+        const itemSearchText = normalizeText(model.search_text);
 
         const itemColores = (model.colores || []).map(c => normalizeText(c.color));
         const itemTallas = new Set();
@@ -569,8 +576,11 @@ async function handleGetStock(url, env) {
         return tokens.every(token => {
           if (itemCat.includes(token) || itemCatCanon.includes(token)) return true;
           if (itemNombre.includes(token) || itemId.includes(token)) return true;
+          if (itemSearchText.includes(token)) return true;
           if (itemColores.some(c => c.includes(token) || (SYNONYMS_MAP[c] && SYNONYMS_MAP[c].includes(token)))) return true;
           if (itemTallas.has(token)) return true;
+          if ((token === 'camisa' || token === 'chemise' || token === 'franela') && 
+              (itemCat.includes('chemise') || itemCat.includes('camisa') || itemCat.includes('franela') || itemCat.includes('set') || itemNombre.includes('camisa') || itemNombre.includes('chemise'))) return true;
           return false;
         });
       });
