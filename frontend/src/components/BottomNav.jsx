@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Calculator, CreditCard } from 'lucide-react';
+import { Search, Calculator, TrendingDown, CreditCard } from 'lucide-react';
 
 export default function BottomNav({ activeTab, setActiveTab }) {
   const navItems = [
@@ -16,6 +16,12 @@ export default function BottomNav({ activeTab, setActiveTab }) {
       badge: 'BCV'
     },
     {
+      id: 'binance',
+      label: 'Brecha',
+      icon: TrendingDown,
+      badge: 'Binance'
+    },
+    {
       id: 'pago',
       label: 'Pago Móvil',
       icon: CreditCard,
@@ -24,8 +30,8 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 glass-nav safe-pb shadow-2xl border-t border-slate-800">
-      <div className="flex items-center justify-around max-w-lg mx-auto py-2 px-3">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 glass-nav safe-pb shadow-2xl border-t border-slate-800/80">
+      <div className="flex items-center justify-around max-w-lg mx-auto pt-1.5 pb-0.5 px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -34,7 +40,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl relative transition-all ${
+              className={`flex-1 flex flex-col items-center justify-center py-0.5 rounded-xl relative transition-all ${
                 isActive ? 'text-brand-500 bg-brand-500/10' : 'text-slate-400 hover:text-slate-200'
               }`}
             >

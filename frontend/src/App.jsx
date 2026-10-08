@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
 import StockModule from './components/StockModule';
 import BcvModule from './components/BcvModule';
+import BinanceBrechaModule from './components/BinanceBrechaModule';
 import PagoMovilModule from './components/PagoMovilModule';
 import BottomNav from './components/BottomNav';
 
@@ -255,6 +256,10 @@ export default function App() {
 
         {activeTab === 'bcv' && (
           <BcvModule bcvRate={bcvRate} />
+        )}
+
+        {activeTab === 'binance' && (
+          <BinanceBrechaModule bcvRate={bcvRate} />
         )}
 
         {activeTab === 'pago' && (
