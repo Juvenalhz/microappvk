@@ -143,10 +143,10 @@ ${bsNum > 0 ? `----------------------------------
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between p-3 sm:p-4 max-w-lg md:max-w-xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-2.5 pb-16">
+    <div className="flex-1 flex flex-col justify-start p-3 sm:p-5 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3 pb-16">
       
-      {/* 1. Header Compacto con Botón de Refresco en Vivo */}
-      <div className="flex items-center justify-between bg-surface-card border border-surface-cardBorder rounded-xl px-3 py-2 sm:py-2.5 shadow-md">
+      {/* 1. Header Compacto */}
+      <div className="flex items-center justify-between bg-surface-card border border-surface-cardBorder rounded-xl px-3.5 py-2.5 shadow-md">
         <div className="flex items-center space-x-2">
           <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
             <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -180,172 +180,184 @@ ${bsNum > 0 ? `----------------------------------
         </div>
       </div>
 
-      {/* 2. TARJETA HERO DE RESULTADOS (RESPONSIVA WEB/MOBILE) */}
-      <div className="bg-gradient-to-br from-surface-card via-slate-900 to-[#121827] border border-amber-500/30 rounded-2xl p-3.5 sm:p-4 shadow-xl space-y-2.5 relative overflow-hidden">
+      {/* Grid Responsivo: 1 columna en móvil, 2 columnas en Desktop Web (md:) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 md:gap-6 items-start">
         
-        {/* Glow sutil */}
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/15 rounded-full blur-2xl pointer-events-none" />
+        {/* COLUMNA IZQUIERDA: Tarjeta Hero de Resultados + Inputs */}
+        <div className="space-y-3">
+          
+          {/* TARJETA HERO DE RESULTADOS */}
+          <div className="bg-gradient-to-br from-surface-card via-slate-900 to-[#121827] border border-amber-500/30 rounded-2xl p-3.5 sm:p-4 shadow-xl space-y-3 relative overflow-hidden">
+            
+            {/* Glow sutil */}
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/15 rounded-full blur-2xl pointer-events-none" />
 
-        {/* Métrica de Brecha General (Instantánea) */}
-        <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/25 rounded-xl p-2.5 sm:p-3">
-          <div className="flex items-center space-x-2">
-            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
-              <ArrowUpRight className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-300">Diferencial de Tasa (Brecha)</div>
-              <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono leading-none tracking-tight mt-0.5">
-                +{brechaTasaPorcentaje.toFixed(2)}% <span className="text-xs font-bold text-slate-300">sobre BCV</span>
+            {/* Métrica de Brecha General */}
+            <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/25 rounded-xl p-2.5 sm:p-3">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+                  <ArrowUpRight className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-300">Diferencial de Tasa (Brecha)</div>
+                  <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono leading-none tracking-tight mt-0.5">
+                    +{brechaTasaPorcentaje.toFixed(2)}% <span className="text-xs font-bold text-slate-300">sobre BCV</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-right flex flex-col items-end">
+                <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Factor Reposición</span>
+                <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-black text-xs sm:text-sm font-mono border border-amber-500/40 shadow-sm mt-0.5">
+                  x{factorReposicion.toFixed(3)}
+                </span>
               </div>
             </div>
+
+            {/* Desglose de Operación en Divisas */}
+            {bsNum > 0 ? (
+              <div className="space-y-2 animate-fade-in">
+                <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
+                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                    <div className="text-[10px] sm:text-xs font-medium text-slate-400">🏛️ Venta a Tasa BCV:</div>
+                    <div className="text-base sm:text-lg font-black text-emerald-400 font-mono mt-0.5 leading-none break-all">
+                      ${usdBcv.toFixed(2)} <span className="text-[9px] text-slate-400">USD</span>
+                    </div>
+                    <div className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-1">Tasa: {bcvNum.toFixed(2)}</div>
+                  </div>
+
+                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                    <div className="text-[10px] sm:text-xs font-medium text-slate-400">🟡 Recibido en Binance:</div>
+                    <div className="text-base sm:text-lg font-black text-amber-400 font-mono mt-0.5 leading-none break-all">
+                      ${usdBinance.toFixed(2)} <span className="text-[9px] text-slate-400">USDT</span>
+                    </div>
+                    <div className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-1">Tasa: {binanceNum.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                {/* Pérdida Neta */}
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+                    <span className="text-xs sm:text-sm font-bold text-red-300">Pérdida en Compra:</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm sm:text-base font-black text-red-400 font-mono">-${perdidaUsd.toFixed(2)} USD</span>
+                    <span className="text-[10px] sm:text-xs font-bold text-red-300 ml-1 font-mono">(-{porcentajePerdida.toFixed(2)}%)</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-800 text-center text-xs text-slate-300 font-medium">
+                💡 Ingresa un monto en Bs con el teclado para calcular el total recibido en Binance.
+              </div>
+            )}
+
           </div>
 
-          <div className="text-right flex flex-col items-end">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Factor Reposición</span>
-            <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-black text-xs sm:text-sm font-mono border border-amber-500/40 shadow-sm mt-0.5">
-              x{factorReposicion.toFixed(3)}
-            </span>
+          {/* Selector de Inputs MODIFICABLES */}
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+            {/* Input Monto Bs */}
+            <button
+              onClick={() => setActiveInput('bs')}
+              className={`p-2 sm:p-2.5 rounded-xl text-left border transition-all relative overflow-hidden ${
+                activeInput === 'bs'
+                  ? 'bg-amber-500/15 border-amber-400 text-white ring-1 ring-amber-400/40 shadow-md'
+                  : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
+              }`}
+            >
+              <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Monto en Bs</div>
+              <div className="text-xs sm:text-base font-black font-mono text-amber-400 leading-tight min-h-[1.25rem] truncate">
+                {bsNum > 0 ? formatBs(bsNum) : <span className="text-slate-500 italic font-normal text-[11px]">Ingresar...</span>}
+              </div>
+              {activeInput === 'bs' && (
+                <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              )}
+            </button>
+
+            {/* Input Tasa Binance Modificable */}
+            <button
+              onClick={() => setActiveInput('binance')}
+              className={`p-2 sm:p-2.5 rounded-xl text-left border transition-all relative overflow-hidden ${
+                activeInput === 'binance'
+                  ? 'bg-amber-500/15 border-amber-400 text-white ring-1 ring-amber-400/40 shadow-md'
+                  : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
+              }`}
+            >
+              <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-0.5 flex items-center justify-between">
+                <span>Tasa Binance</span>
+                <span className="text-[8px] opacity-75">✏️</span>
+              </div>
+              <div className="text-xs sm:text-base font-black font-mono text-white leading-tight truncate">
+                {binanceNum > 0 ? binanceNum.toFixed(2) : '0'}
+              </div>
+              {activeInput === 'binance' && (
+                <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              )}
+            </button>
+
+            {/* Input Tasa BCV Modificable */}
+            <button
+              onClick={() => setActiveInput('bcv')}
+              className={`p-2 sm:p-2.5 rounded-xl text-left border transition-all relative overflow-hidden ${
+                activeInput === 'bcv'
+                  ? 'bg-blue-500/15 border-blue-400 text-white ring-1 ring-blue-400/40 shadow-md'
+                  : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
+              }`}
+            >
+              <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-400 mb-0.5 flex items-center justify-between">
+                <span>Tasa BCV</span>
+                <span className="text-[8px] opacity-75">✏️</span>
+              </div>
+              <div className="text-xs sm:text-base font-black font-mono text-white leading-tight truncate">
+                {bcvNum > 0 ? bcvNum.toFixed(2) : '0'}
+              </div>
+              {activeInput === 'bcv' && (
+                <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              )}
+            </button>
           </div>
+
         </div>
 
-        {/* Desglose de Operación en Divisas (Si hay monto en Bs) o Estado Listo */}
-        {bsNum > 0 ? (
-          <div className="space-y-2 animate-fade-in">
-            <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
-              <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
-                <div className="text-[10px] sm:text-xs font-medium text-slate-400">🏛️ Venta a Tasa BCV:</div>
-                <div className="text-base sm:text-lg font-black text-emerald-400 font-mono mt-0.5 leading-none break-all">
-                  ${usdBcv.toFixed(2)} <span className="text-[9px] text-slate-400">USD</span>
-                </div>
-                <div className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-1">Tasa: {bcvNum.toFixed(2)}</div>
-              </div>
+        {/* COLUMNA DERECHA: Teclado Numérico Táctil */}
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'].map((key) => {
+              if (key === 'DEL') {
+                return (
+                  <button
+                    key={key}
+                    onClick={() => handleKeyPress('DEL')}
+                    className="py-2.5 sm:py-3 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-touch active:scale-95 shadow"
+                  >
+                    <Delete className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                );
+              }
 
-              <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
-                <div className="text-[10px] sm:text-xs font-medium text-slate-400">🟡 Recibido en Binance:</div>
-                <div className="text-base sm:text-lg font-black text-amber-400 font-mono mt-0.5 leading-none break-all">
-                  ${usdBinance.toFixed(2)} <span className="text-[9px] text-slate-400">USDT</span>
-                </div>
-                <div className="text-[9px] sm:text-[10px] text-slate-500 font-mono mt-1">Tasa: {binanceNum.toFixed(2)}</div>
-              </div>
-            </div>
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleKeyPress(key)}
+                  className="py-2.5 sm:py-3 rounded-xl bg-surface-card border border-surface-cardBorder text-white font-extrabold text-lg sm:text-xl shadow transition-touch active:scale-95 active:bg-slate-700"
+                >
+                  {key}
+                </button>
+              );
+            })}
+          </div>
 
-            {/* Pérdida Neta */}
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
-                <span className="text-xs sm:text-sm font-bold text-red-300">Pérdida en Compra:</span>
-              </div>
-              <div className="text-right">
-                <span className="text-sm sm:text-base font-black text-red-400 font-mono">-${perdidaUsd.toFixed(2)} USD</span>
-                <span className="text-[10px] sm:text-xs font-bold text-red-300 ml-1 font-mono">(-{porcentajePerdida.toFixed(2)}%)</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800 text-center text-xs text-slate-400 font-medium">
-            💡 Ingresa un monto en Bs para calcular los dólares netos recibidos en Binance.
-          </div>
-        )}
+          {/* Botón Borrar Todo */}
+          <button
+            onClick={() => handleKeyPress('CLEAR')}
+            className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-[11px] sm:text-xs font-semibold hover:text-white transition-all"
+          >
+            Limpiar {activeInput === 'bs' ? 'Monto Bs' : activeInput === 'binance' ? 'Tasa Binance' : 'Tasa BCV'}
+          </button>
+        </div>
 
       </div>
-
-      {/* 3. Selector de Inputs MODIFICABLES */}
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-        {/* Input Monto Bs */}
-        <button
-          onClick={() => setActiveInput('bs')}
-          className={`p-2 sm:p-2.5 rounded-xl text-left border transition-all relative overflow-hidden ${
-            activeInput === 'bs'
-              ? 'bg-amber-500/15 border-amber-400 text-white ring-1 ring-amber-400/40 shadow-md'
-              : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
-          }`}
-        >
-          <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Monto en Bs</div>
-          <div className="text-xs sm:text-base font-black font-mono text-amber-400 leading-tight min-h-[1.25rem] truncate">
-            {bsNum > 0 ? formatBs(bsNum) : <span className="text-slate-500 italic font-normal text-[11px]">Ingresar...</span>}
-          </div>
-          {activeInput === 'bs' && (
-            <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-          )}
-        </button>
-
-        {/* Input Tasa Binance Modificable */}
-        <button
-          onClick={() => setActiveInput('binance')}
-          className={`p-2 sm:p-2.5 rounded-xl text-left border transition-all relative overflow-hidden ${
-            activeInput === 'binance'
-              ? 'bg-amber-500/15 border-amber-400 text-white ring-1 ring-amber-400/40 shadow-md'
-              : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
-          }`}
-        >
-          <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-0.5 flex items-center justify-between">
-            <span>Tasa Binance</span>
-            <span className="text-[8px] opacity-75">✏️</span>
-          </div>
-          <div className="text-xs sm:text-base font-black font-mono text-white leading-tight truncate">
-            {binanceNum > 0 ? binanceNum.toFixed(2) : '0'}
-          </div>
-          {activeInput === 'binance' && (
-            <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-          )}
-        </button>
-
-        {/* Input Tasa BCV Modificable */}
-        <button
-          onClick={() => setActiveInput('bcv')}
-          className={`p-2 sm:p-2.5 rounded-xl text-left border transition-all relative overflow-hidden ${
-            activeInput === 'bcv'
-              ? 'bg-blue-500/15 border-blue-400 text-white ring-1 ring-blue-400/40 shadow-md'
-              : 'bg-surface-card border-surface-cardBorder text-slate-300 hover:border-slate-700'
-          }`}
-        >
-          <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-400 mb-0.5 flex items-center justify-between">
-            <span>Tasa BCV</span>
-            <span className="text-[8px] opacity-75">✏️</span>
-          </div>
-          <div className="text-xs sm:text-base font-black font-mono text-white leading-tight truncate">
-            {bcvNum > 0 ? bcvNum.toFixed(2) : '0'}
-          </div>
-          {activeInput === 'bcv' && (
-            <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-          )}
-        </button>
-      </div>
-
-      {/* 4. TECLADO NUMÉRICO TÁCTIL COMPACTO */}
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'].map((key) => {
-          if (key === 'DEL') {
-            return (
-              <button
-                key={key}
-                onClick={() => handleKeyPress('DEL')}
-                className="py-2 sm:py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition-touch active:scale-95 shadow"
-              >
-                <Delete className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            );
-          }
-
-          return (
-            <button
-              key={key}
-              onClick={() => handleKeyPress(key)}
-              className="py-2 sm:py-2.5 rounded-xl bg-surface-card border border-surface-cardBorder text-white font-extrabold text-lg sm:text-xl shadow transition-touch active:scale-95 active:bg-slate-700"
-            >
-              {key}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Botón Borrar Todo */}
-      <button
-        onClick={() => handleKeyPress('CLEAR')}
-        className="w-full py-1.5 sm:py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 text-[11px] sm:text-xs font-semibold hover:text-white transition-all"
-      >
-        Limpiar {activeInput === 'bs' ? 'Monto Bs' : activeInput === 'binance' ? 'Tasa Binance' : 'Tasa BCV'}
-      </button>
 
     </div>
   );
