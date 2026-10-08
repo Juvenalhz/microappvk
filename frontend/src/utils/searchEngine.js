@@ -1,4 +1,11 @@
 /**
+ * Lista de colores canónicos reconocidos por el sistema
+ */
+export const COLOR_CANONICAL_SET = new Set([
+  'blanco', 'negro', 'marron', 'azul', 'rojo', 'verde', 'gris', 'rosado', 'amarillo', 'morado', 'vinotinto', 'naranja', 'fucsia', 'beige'
+]);
+
+/**
  * Diccionario de Sinónimos y Alias para Tienda Retail (Venezuela)
  */
 export const SYNONYMS_MAP = {
@@ -69,7 +76,7 @@ export function normalizeStr(str) {
     .toString()
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,)
+    .replace(/[\u0300-\u036f]/g, '')
     .trim();
 }
 
@@ -95,6 +102,7 @@ export function tokenizeQuery(rawQuery) {
 
 /**
  * Evalúa si un producto (modelo) coincide con TODOS los tokens introducidos por el usuario
+ * aplicando estricta disponibilidad de stock > 0 para combinaciones de color y talla
  */
 export function matchesAllTokens(item, tokens) {
   if (!tokens || tokens.length === 0) return true;
@@ -104,40 +112,86 @@ export function matchesAllTokens(item, tokens) {
   const itemCategoriaCanon = SYNONYMS_MAP[itemCategoria] || itemCategoria;
   const itemId = normalizeStr(item.id);
 
-  // Extraer todos los colores del producto normalizados
-  const itemColores = [];
-  if (Array.isArray(item.colores)) {
-    for (const c of item.colores) {
-      const cNorm = normalizeStr(c.color);
-      itemColores.push(cNorm);
-      if (SYNONYMS_MAP[cNorm]) itemColores.push(SYNONYMS_MAP[cNorm]);
+  // Clasificar los tokens de la búsqueda
+  const colorTokens = [];
+  const sizeTokens = [];
+  const generalTokens = [];
+
+  const sizeRegex = /^(xs|s|m|l|xl|xxl|2xl|3xl|4xl|[0-9]{2})$/i;
+
+  for (const token of tokens) {
+    if (COLOR_CANONICAL_SET.has(token)) {
+      colorTokens.push(token);
+    } else if (sizeRegex.test(token)) {
+      sizeTokens.push(token);
+    } else {
+      generalTokens.push(token);
     }
   }
 
-  // Extraer todas las tallas del producto normalizadas
-  const itemTallas = new Set();
-  if (Array.isArray(item.colores)) {
-    for (const c of item.colores) {
-      if (Array.isArray(c.tallas)) {
-        for (const t of c.tallas) {
-          itemTallas.add(normalizeStr(t.talla));
+  // 1. Verificar que los generalTokens (nombre, categoría, ID) coincidan
+  const matchesGeneral = generalTokens.every(token => {
+    return itemCategoria.includes(token) || 
+           itemCategoriaCanon.includes(token) || 
+           itemNombre.includes(token) || 
+           itemId.includes(token);
+  });
+
+  if (!matchesGeneral) return false;
+
+  // 2. Si hay colorTokens o sizeTokens, verificar que exista al menos UNA variante DISPONIBLE (stock > 0)
+  // que cumpla SIMULTÁNEAMENTE con el color y/o la talla solicitados
+  if (colorTokens.length > 0 || sizeTokens.length > 0) {
+    let hasMatchingAvailableVariant = false;
+
+    const colorGroups = Array.isArray(item.colores) ? item.colores : [];
+
+    for (const group of colorGroups) {
+      const groupColorNorm = normalizeStr(group.color);
+      const groupColorCanon = SYNONYMS_MAP[groupColorNorm] || groupColorNorm;
+
+      // ¿Coincide este grupo de color con los colorTokens buscados?
+      const colorMatches = colorTokens.length === 0 || colorTokens.some(ct => 
+        groupColorNorm.includes(ct) || groupColorCanon.includes(ct)
+      );
+
+      if (!colorMatches) continue;
+
+      // Revisar las tallas dentro de este grupo de color
+      const tallas = Array.isArray(group.tallas) ? group.tallas : [];
+      for (const t of tallas) {
+        const tNorm = normalizeStr(t.talla);
+
+        // ¿Coincide esta talla con los sizeTokens buscados?
+        const sizeMatches = sizeTokens.length === 0 || sizeTokens.includes(tNorm);
+
+        // ¡CRUCIAL!: Para que la coincidencia sea válida en búsqueda de filtro, DEBE TENER STOCK > 0
+        if (sizeMatches && Number(t.stock) > 0) {
+          hasMatchingAvailableVariant = true;
+          break;
+        }
+      }
+
+      if (hasMatchingAvailableVariant) break;
+    }
+
+    // Si también tiene item.variantes plano (respaldo)
+    if (!hasMatchingAvailableVariant && Array.isArray(item.variantes)) {
+      for (const v of item.variantes) {
+        const vTalla = normalizeStr(v.talla);
+        const sizeMatches = sizeTokens.length === 0 || sizeTokens.includes(vTalla);
+        
+        if (colorTokens.length === 0 && sizeMatches && Number(v.stock) > 0) {
+          hasMatchingAvailableVariant = true;
+          break;
         }
       }
     }
-  } else if (Array.isArray(item.variantes)) {
-    for (const v of item.variantes) {
-      itemTallas.add(normalizeStr(v.talla));
-    }
+
+    if (!hasMatchingAvailableVariant) return false;
   }
 
-  // Verificar que CADA token coincida al menos con algún atributo del producto
-  return tokens.every(token => {
-    if (itemCategoria.includes(token) || itemCategoriaCanon.includes(token)) return true;
-    if (itemNombre.includes(token) || itemId.includes(token)) return true;
-    if (itemColores.some(c => c.includes(token))) return true;
-    if (itemTallas.has(token)) return true;
-    return false;
-  });
+  return true;
 }
 
 /**

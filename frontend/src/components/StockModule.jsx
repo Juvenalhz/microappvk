@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Search, X, Package, CheckCircle2 } from 'lucide-react';
-import { filterCatalog, tokenizeQuery, normalizeStr, SYNONYMS_MAP } from '../utils/searchEngine';
+import { filterCatalog, tokenizeQuery, normalizeStr, SYNONYMS_MAP, COLOR_CANONICAL_SET } from '../utils/searchEngine';
 
 export default function StockModule({ stockData, bcvRate, searchTerm, setSearchTerm, isLoading, onAddToCart, ticketItems = [], onOpenTicket }) {
   const inputRef = useRef(null);
@@ -20,6 +20,8 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
 
   const totalTicketUsd = ticketItems.reduce((acc, i) => acc + (i.precio_usd * i.cant), 0);
   const totalTicketCount = ticketItems.reduce((acc, i) => acc + i.cant, 0);
+
+  const sizeRegex = /^(xs|s|m|l|xl|xxl|2xl|3xl|4xl|[0-9]{2})$/i;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-3 sm:p-4 space-y-3.5 max-w-lg mx-auto w-full">
@@ -99,7 +101,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
         {!filteredData || filteredData.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center p-6 bg-surface-card/40 rounded-2xl border border-surface-cardBorder">
             <Package className="w-12 h-12 text-slate-600 mb-2 stroke-[1.5]" />
-            <p className="text-slate-300 font-medium text-sm">No se encontraron prendas</p>
+            <p className="text-slate-300 font-medium text-sm">No se encontraron prendas con stock disponible</p>
             <p className="text-slate-500 text-xs mt-1">Prueba combinando prendas, color o talla (ej: "franela marron s")</p>
           </div>
         ) : (
@@ -147,29 +149,19 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                 {/* Variantes por Color y Talla (Tocar talla para agregar a Cotización) */}
                 <div className="space-y-3">
                   {(() => {
-                    // Identificar si la búsqueda actual contiene tokens de color o talla
-                    const colorTokens = activeTokens.filter(token => {
-                      return item.colores?.some(c => {
-                        const normC = normalizeStr(c.color);
-                        const canonC = SYNONYMS_MAP[normC] || normC;
-                        return normC.includes(token) || canonC.includes(token) || SYNONYMS_MAP[token] === canonC;
-                      });
-                    });
+                    const colorTokens = activeTokens.filter(token => COLOR_CANONICAL_SET.has(token));
                     const hasColorToken = colorTokens.length > 0;
 
-                    const sizeTokens = activeTokens.filter(token => {
-                      return item.colores?.some(c => c.tallas?.some(t => normalizeStr(t.talla) === token)) ||
-                             item.variantes?.some(v => normalizeStr(v.talla) === token);
-                    });
+                    const sizeTokens = activeTokens.filter(token => sizeRegex.test(token));
                     const hasSizeToken = sizeTokens.length > 0;
 
-                    // Filtrar colores
+                    // Filtrar colores por token de color especificado
                     let displayColores = item.colores || [];
                     if (hasColorToken) {
                       displayColores = displayColores.filter(c => {
                         const normC = normalizeStr(c.color);
                         const canonC = SYNONYMS_MAP[normC] || normC;
-                        return colorTokens.some(t => normC.includes(t) || canonC.includes(t) || SYNONYMS_MAP[t] === canonC);
+                        return colorTokens.some(t => normC.includes(t) || canonC.includes(t));
                       });
                     }
 
@@ -188,11 +180,11 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                           displayColores.map((colorGroup) => {
                             const normColor = normalizeStr(colorGroup.color);
                             const canonColor = SYNONYMS_MAP[normColor] || normColor;
-                            const isColorMatched = hasColorToken && colorTokens.some(t => normColor.includes(t) || canonColor.includes(t) || SYNONYMS_MAP[t] === canonColor);
+                            const isColorMatched = hasColorToken && colorTokens.some(t => normColor.includes(t) || canonColor.includes(t));
 
                             let visibleTallas = colorGroup.tallas || [];
                             if (hasSizeToken) {
-                              const avail = visibleTallas.filter(t => t.stock > 0);
+                              const avail = visibleTallas.filter(t => t.stock > 0 && sizeTokens.includes(normalizeStr(t.talla)));
                               if (avail.length > 0) visibleTallas = avail;
                             }
 
