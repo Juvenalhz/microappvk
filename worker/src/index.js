@@ -221,13 +221,23 @@ function parseFinapartnerItem(item) {
     const targetChannel = tiendaChannel || item.salesChannels[0];
 
     if (targetChannel && Array.isArray(targetChannel.items) && targetChannel.items.length > 0) {
-      for (const chItem of targetChannel.items) {
-        if (chItem.enable !== false) {
-          const cand = chItem.sellingPrice || chItem.salePrice || chItem.precio_venta || chItem.price || chItem.precio_usd;
-          if (cand !== undefined && cand !== null && Number(cand) > 0) {
-            precioUsd = Number(cand);
-            break;
-          }
+      const itemIdStr = (item._id || item.id || '').toString();
+      const itemNameStr = (item.name || item.nombre || '').toLowerCase().trim();
+
+      // Buscar exclusivamente el item del canal que corresponde a ESTA prenda por referenceId o nombre
+      const matchedChItem = targetChannel.items.find(ch => {
+        const refIdStr = (ch.referenceId || ch._id || ch.id || '').toString();
+        const chNameStr = (ch.name || ch.nombre || '').toLowerCase().trim();
+
+        if (itemIdStr && refIdStr && refIdStr === itemIdStr) return true;
+        if (itemNameStr && chNameStr && chNameStr === itemNameStr) return true;
+        return false;
+      }) || (targetChannel.items.length === 1 ? targetChannel.items[0] : null);
+
+      if (matchedChItem && matchedChItem.enable !== false) {
+        const cand = matchedChItem.sellingPrice || matchedChItem.salePrice || matchedChItem.precio_venta || matchedChItem.price || matchedChItem.precio_usd;
+        if (cand !== undefined && cand !== null && Number(cand) > 0) {
+          precioUsd = Number(cand);
         }
       }
     }
