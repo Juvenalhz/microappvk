@@ -30,8 +30,8 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0b0f19] border-t border-slate-800/80 shadow-2xl">
-      <div className="flex items-center justify-around max-w-lg mx-auto h-14 pt-1 pb-1 px-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0b0f19] border-t border-slate-800/80 shadow-2xl pb-[env(safe-area-inset-bottom,0px)]">
+      <div className="flex items-center justify-around max-w-lg md:max-w-xl mx-auto h-[49px] px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -40,7 +40,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`flex-1 flex flex-col items-center justify-center py-0.5 transition-all relative ${
+              className={`flex-1 h-full flex flex-col items-center justify-center transition-all relative ${
                 isActive ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
