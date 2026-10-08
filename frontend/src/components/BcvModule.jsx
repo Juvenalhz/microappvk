@@ -5,6 +5,7 @@ export default function BcvModule({ bcvRate }) {
   const [items, setItems] = useState([]); // Lista de montos sumados [15, 20, 12.5]
   const [usdInput, setUsdInput] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isItemsModalOpen, setIsItemsModalOpen] = useState(false);
 
   const rawTasa = bcvRate ? Number(bcvRate.tasa) : 36.50;
   const tasa = Math.floor(rawTasa * 100) / 100;
@@ -136,35 +137,18 @@ export default function BcvModule({ bcvRate }) {
               </div>
             </div>
 
-            {/* Lista compacta scrolleable de montos sumados dentro de la tarjeta (evita redimensionar el teclado en móvil) */}
+            {/* Botón para abrir el Modal de Montos Ingresados (Manteniendo altura fija) */}
             {items.length > 0 && (
-              <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-2 space-y-1 animate-fade-in">
-                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 px-1">
-                  <span>Montos ingresados:</span>
-                  <button
-                    onClick={handleClearAll}
-                    className="text-red-400 hover:text-red-300 font-semibold"
-                  >
-                    Vaciar todo
-                  </button>
-                </div>
-                <div className="max-h-20 overflow-y-auto no-scrollbar space-y-1 pr-1">
-                  {items.map((price, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs px-2 py-0.5 bg-slate-900/60 rounded-lg">
-                      <span className="text-slate-400 text-[11px]">Monto {idx + 1}:</span>
-                      <div className="flex items-center space-x-1.5 font-mono">
-                        <span className="text-emerald-400 font-bold">${price.toFixed(2)}</span>
-                        <button
-                          onClick={() => handleRemoveItem(idx)}
-                          className="text-slate-500 hover:text-red-400"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <button
+                onClick={() => setIsItemsModalOpen(true)}
+                className="w-full py-1.5 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-amber-400 border border-slate-800 text-xs font-bold flex items-center justify-between transition-all active:scale-98 shadow-inner"
+              >
+                <span className="flex items-center space-x-1.5">
+                  <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{items.length} {items.length === 1 ? 'monto agregado' : 'montos agregados'}</span>
+                </span>
+                <span className="text-[11px] underline font-semibold">Ver detalle 📋</span>
+              </button>
             )}
 
             <div className="my-1 border-t border-slate-800" />
@@ -270,8 +254,62 @@ export default function BcvModule({ bcvRate }) {
 
       </div>
 
+      {/* Modal / Popup de Montos Agregados en la Calculadora */}
+      {isItemsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#0f172a] border border-slate-700/80 rounded-3xl max-w-sm w-full p-4 space-y-3 shadow-2xl animate-scale-in">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <h3 className="font-extrabold text-white text-sm flex items-center space-x-1.5">
+                <ShoppingBag className="w-4 h-4 text-amber-400" />
+                <span>Montos Sumados ({items.length})</span>
+              </h3>
+              <button 
+                onClick={() => setIsItemsModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto no-scrollbar space-y-1.5 py-1">
+              {items.map((price, idx) => (
+                <div key={idx} className="flex items-center justify-between bg-slate-900/80 border border-slate-800 p-2.5 rounded-xl text-xs">
+                  <span className="text-slate-300 font-medium">Monto {idx + 1}:</span>
+                  <div className="flex items-center space-x-2 font-mono">
+                    <span className="text-emerald-400 font-bold">${price.toFixed(2)} USD</span>
+                    <button 
+                      onClick={() => handleRemoveItem(idx)}
+                      className="text-slate-500 hover:text-red-400 p-0.5 rounded"
+                      title="Eliminar este monto"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex items-center space-x-2">
+              <button
+                onClick={() => { handleClearAll(); setIsItemsModalOpen(false); }}
+                className="flex-1 py-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 font-bold text-xs hover:bg-red-500/20 transition-all"
+              >
+                Vaciar Lista
+              </button>
+              <button
+                onClick={() => setIsItemsModalOpen(false)}
+                className="flex-1 py-2 rounded-xl bg-slate-800 text-white font-bold text-xs hover:bg-slate-700 transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
 
 

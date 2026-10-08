@@ -72,7 +72,7 @@ export default function TicketModal({ isOpen, onClose, ticketItems, setTicketIte
     }).join('\n\n');
 
     const fullReport = 
-`📋 *DETALLADO*
+`📋 *DETALLADO DE COMPRA*
 ----------------------------------
 ${itemsText}
 ----------------------------------
