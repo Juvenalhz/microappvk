@@ -65,7 +65,7 @@ export default function BcvModule({ bcvRate }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-start p-4 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3.5 pb-16">
+    <div className="flex-1 flex flex-col justify-start p-4 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3.5 pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
       
       {/* Grid Responsivo: 1 col en mobile, 2 cols en Desktop Web (md:) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 items-start">
