@@ -30,7 +30,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed inset-x-4 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] z-50 mx-auto max-w-md flex items-center justify-around py-2 px-3 rounded-2xl bg-[#0d1624]/90 backdrop-blur-md border border-slate-700/50 shadow-2xl shadow-black/80">
+    <nav className="fixed inset-x-4 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] z-50 mx-auto max-w-md flex items-center justify-around py-2.5 px-4 rounded-2xl bg-[#0d1624]/90 backdrop-blur-md border border-slate-700/50 shadow-2xl shadow-black/60">
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;
