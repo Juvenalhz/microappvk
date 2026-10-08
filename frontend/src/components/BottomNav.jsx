@@ -30,8 +30,8 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 glass-nav safe-pb shadow-2xl border-t border-slate-800/80">
-      <div className="flex items-center justify-around max-w-lg mx-auto pt-1.5 pb-0.5 px-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 glass-nav shadow-2xl border-t border-slate-800/80">
+      <div className="flex items-center justify-around max-w-lg mx-auto pt-1.5 pb-[max(0.25rem,env(safe-area-inset-bottom))] px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;

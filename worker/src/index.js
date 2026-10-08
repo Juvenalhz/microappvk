@@ -374,65 +374,60 @@ async function syncCatalog(env, throwOnError = false) {
  * Obtiene la tasa del BCV y la almacena en KV
  */
 async function syncBcvRate(env) {
-  console.log('[BCV Sync] Consultando tasa oficial del BCV...');
-  let tasa = 36.50;
-  let fuente = 'Banco Central de Venezuela (bcv.org.ve)';
+  console.log('[Rates Sync] Consultando tasas BCV Oficial y Binance P2P...');
+  let tasa = 873.87;
+  let binance = 1007.74;
+  let fuente = 'BCV Oficial & Binance P2P';
 
-  // 1. Intentar raspar directamente la página oficial del BCV
   try {
-    const resBcv = await fetch('https://www.bcv.org.ve', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml'
-      }
-    });
-
-    if (resBcv.ok) {
-      const html = await resBcv.text();
-      // Buscar contenedor de USD en la tabla del BCV
-      const usdMatch = html.match(/id=["']usd["'][\s\S]*?<strong[^>]*>\s*([\d.,]+)\s*<\/strong>/i) || 
-                       html.match(/<span>\s*USD\s*<\/span>[\s\S]*?<strong[^>]*>\s*([\d.,]+)\s*<\/strong>/i);
-
-      if (usdMatch && usdMatch[1]) {
-        const rawTasaStr = usdMatch[1].replace(/\./g, '').replace(',', '.');
-        const parsedTasa = parseFloat(rawTasaStr);
-        if (!isNaN(parsedTasa) && parsedTasa > 0) {
-          tasa = parsedTasa;
-          fuente = 'Oficial BCV (bcv.org.ve)';
-          console.log(`[BCV Sync] Tasa extraída directamente de bcv.org.ve: ${tasa}`);
-        }
+    const res = await fetch('https://ve.dolarapi.com/v1/dolares');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const oficialObj = data.find(d => d.fuente === 'oficial');
+        const paraleloObj = data.find(d => d.fuente === 'paralelo' || d.fuente === 'binance');
+        if (oficialObj && oficialObj.promedio) tasa = Number(oficialObj.promedio);
+        if (paraleloObj && paraleloObj.promedio) binance = Number(paraleloObj.promedio);
       }
     }
   } catch (e) {
-    console.warn('[BCV Sync] No se pudo obtener directamente de bcv.org.ve, usando API respaldo:', e.message);
+    console.warn('[Rates Sync] Error al obtener de dolarapi:', e.message);
   }
 
-  // 2. Si falló el scrape directo de bcv.org.ve, usar API de respaldo (dolarapi.com)
-  if (tasa === 36.50) {
+  // Intentar Binance P2P directo si es necesario
+  if (!binance || binance <= tasa) {
     try {
-      const bcvUrl = env.BCV_API_URL || 'https://ve.dolarapi.com/v1/dolares/oficial';
-      const res = await fetch(bcvUrl);
-      if (res.ok) {
-        const data = await res.json();
-        const parsed = Number(data.promedio || data.monto || data.tasa);
-        if (!isNaN(parsed) && parsed > 0) {
-          tasa = parsed;
-          fuente = 'DolarApi.com (BCV Oficial)';
+      const resBinance = await fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fiat: 'VES', page: 1, rows: 5, tradeType: 'BUY', asset: 'USDT' })
+      });
+      if (resBinance.ok) {
+        const jsonB = await resBinance.json();
+        if (jsonB && jsonB.data && jsonB.data.length > 0) {
+          const prices = jsonB.data.map(item => parseFloat(item.adv?.price)).filter(p => !isNaN(p) && p > 0);
+          if (prices.length > 0) {
+            binance = prices.reduce((a, b) => a + b, 0) / prices.length;
+          }
         }
       }
-    } catch (err) {
-      console.warn('[BCV Sync] Error al obtener tasa de API respaldo:', err.message);
+    } catch (e) {
+      console.warn('[Rates Sync] Error al obtener de Binance P2P:', e.message);
     }
   }
 
   const bcvData = {
     tasa,
+    tasa_bcv: tasa,
+    binance: Math.floor(binance * 100) / 100,
+    tasa_binance: Math.floor(binance * 100) / 100,
+    brecha_porcentaje: tasa > 0 && binance > 0 ? Math.floor(((binance - tasa) / tasa) * 10000) / 100 : 0,
     fuente,
     updated_at: new Date().toISOString()
   };
 
   await env.STORE_KV.put('tasa_bcv', JSON.stringify(bcvData));
-  console.log(`[BCV Sync] Tasa oficial guardada en KV: ${tasa} Bs/USD (${fuente})`);
+  console.log(`[Rates Sync] Tasas guardadas en KV: BCV=${tasa}, Binance=${binance}`);
   return bcvData;
 }
 
