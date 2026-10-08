@@ -30,7 +30,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0b0f19] border-t border-slate-800/80 shadow-2xl h-14">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0b0f19] border-t border-slate-800/80 shadow-2xl h-11">
       <div className="flex items-center justify-around max-w-lg md:max-w-xl mx-auto h-full px-2">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -45,16 +45,16 @@ export default function BottomNav({ activeTab, setActiveTab }) {
               }`}
             >
               <div className="relative">
-                <Icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-110 text-amber-400' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 transition-transform ${isActive ? 'scale-110 text-amber-400' : 'text-slate-400'}`} />
                 {item.badge && (
-                  <span className="absolute -top-1 -right-3.5 bg-brand-gold text-slate-950 font-black text-[7px] px-1 rounded-full uppercase leading-tight shadow">
+                  <span className="absolute -top-1 -right-3 bg-brand-gold text-slate-950 font-black text-[6.5px] px-1 rounded-full uppercase leading-tight shadow">
                     {item.badge}
                   </span>
                 )}
               </div>
 
-              <span className={`text-[10px] mt-0.5 font-medium transition-all ${
-                isActive ? 'text-white font-bold' : 'text-slate-400'
+              <span className={`text-[9.5px] mt-0.5 leading-none transition-all ${
+                isActive ? 'text-white font-bold' : 'text-slate-400 font-medium'
               }`}>
                 {item.label}
               </span>
