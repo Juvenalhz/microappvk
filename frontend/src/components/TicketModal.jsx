@@ -29,6 +29,14 @@ export default function TicketModal({ isOpen, onClose, ticketItems, setTicketIte
     }).filter(Boolean));
   };
 
+  // Modificar precio unitario (oferta/descuento personalizado en ticket)
+  const handleUpdatePrice = (itemId, newPriceVal) => {
+    const val = parseFloat(newPriceVal);
+    if (!isNaN(val) && val >= 0) {
+      setTicketItems(prev => prev.map(item => item.id === itemId ? { ...item, precio_usd: val } : item));
+    }
+  };
+
   // Eliminar prenda
   const handleRemoveItem = (itemId) => {
     setTicketItems(prev => prev.filter(item => item.id !== itemId));
@@ -140,9 +148,20 @@ ${itemsText}
                       </span>
                     </div>
                     
-                    <div className="mt-2 text-xs font-mono">
-                      <span className="text-emerald-400 font-bold">${item.precio_usd.toFixed(2)}</span>
-                      <span className="text-slate-400 text-[11px] ml-1.5 font-sans">≈ {itemBs} Bs</span>
+                    <div className="mt-2 text-xs font-mono flex items-center space-x-2">
+                      <div className="flex items-center space-x-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-emerald-500/40 text-emerald-400 font-bold shadow-inner">
+                        <span>$</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={item.precio_usd}
+                          onChange={(e) => handleUpdatePrice(item.id, e.target.value)}
+                          className="w-14 bg-transparent text-emerald-400 font-mono font-bold focus:outline-none text-xs"
+                          title="Modificar precio para este ticket/oferta"
+                        />
+                      </div>
+                      <span className="text-slate-400 text-[11px] font-sans">≈ {itemBs} Bs</span>
                     </div>
                   </div>
 

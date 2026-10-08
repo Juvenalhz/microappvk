@@ -1,9 +1,19 @@
 import React from 'react';
 import { RefreshCw, Wifi, WifiOff, DollarSign, ShoppingBag } from 'lucide-react';
 
-export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, ticketCount = 0, onOpenTicket }) {
+export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, lastSync, ticketCount = 0, onOpenTicket }) {
   const rawRate = bcvRate ? Number(bcvRate.tasa) : 0;
   const formattedRate = rawRate > 0 ? (Math.floor(rawRate * 100) / 100).toFixed(2) : '--.--';
+
+  const formatSyncTime = (isoString) => {
+    if (!isoString) return 'En vivo';
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return 'En vivo';
+    }
+  };
 
   return (
     <header className="sticky top-0 z-30 glass-panel px-4 py-3 safe-pt border-b border-surface-cardBorder">
@@ -16,7 +26,9 @@ export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, ticket
           </div>
           <div>
             <h1 className="font-bold text-white text-base leading-none">Piso de Venta</h1>
-            <p className="text-[10px] text-slate-400 font-medium">Tienda Retail • Mobile PWA</p>
+            <p className="text-[10px] text-slate-400 font-medium">
+              Tienda Retail • ERP: <span className="text-emerald-400 font-bold">{formatSyncTime(lastSync)}</span>
+            </p>
           </div>
         </div>
 

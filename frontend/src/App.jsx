@@ -15,7 +15,41 @@ export default function App() {
   const [ticketItems, setTicketItems] = useState([]);
   const [isTicketOpen, setIsTicketOpen] = useState(false);
 
-  const handleAddToCart = (newItem) => {
+  const handleAddToCart = async (newItem) => {
+    // Si la prenda tiene 1 sola unidad disponible, re-verificar en vivo con ERP para evitar doble venta
+    if (newItem.qty === 1 || newItem.stock === 1) {
+      try {
+        const mId = newItem.modelId || newItem.id.split('-')[0];
+        let res = await fetch(`https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock/verify?id=${encodeURIComponent(mId)}`);
+        if (!res.ok) res = await fetch(`/api/stock/verify?id=${encodeURIComponent(mId)}`);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json.verified && json.data) {
+            const modelData = json.data;
+            let currentStock = 0;
+            if (Array.isArray(modelData.colores)) {
+              const cGroup = modelData.colores.find(c => c.color === newItem.color);
+              if (cGroup && Array.isArray(cGroup.tallas)) {
+                const tObj = cGroup.tallas.find(t => t.talla === newItem.talla);
+                if (tObj) currentStock = tObj.stock;
+              }
+            } else if (Array.isArray(modelData.variantes)) {
+              const vObj = modelData.variantes.find(v => v.talla === newItem.talla);
+              if (vObj) currentStock = vObj.stock;
+            }
+
+            if (currentStock <= 0) {
+              alert(`¡Atención! La prenda "${newItem.nombre}" (Talla ${newItem.talla}) ya no está disponible en el ERP.`);
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Realtime Verify] Error al verificar stock antes de agregar:', e);
+      }
+    }
+
     setTicketItems(prev => {
       const existingIndex = prev.findIndex(item => item.id === newItem.id);
       if (existingIndex >= 0) {
