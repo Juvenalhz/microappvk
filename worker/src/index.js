@@ -207,20 +207,26 @@ async function fetchErp(endpoint, env, retryCount = 0) {
  * Parsea un item del API de Finapartner a la estructura unificada de modelo/prendas agrupadas por color y talla
  */
 function parseFinapartnerItem(item) {
-  const nombre = item.name || item.nombre || item.description || 'Prenda Sin Nombre';
-  const modelId = (item._id || item.SKU || item.sku || item.code || nombre).toUpperCase();
-  const categoria = item.category || item.categoria || 'General';
+  const nombre = item.name || item.nombre || item.description || item.title || item.modelo || 'Prenda Sin Nombre';
+  // Usar ID de modelo preferente antes del SKU de variante individual
+  const modelId = (item.modelId || item.modelo_id || item.model || item.groupCode || item._id || item.code || item.SKU || item.sku || nombre).toUpperCase();
+  const categoria = item.category || item.categoria || item.categoryName || 'General';
   
-  // Extraer exclusivamente el precio de VENTA al público (sellingPrice / salePrice / retailPrice)
+  // Extraer exclusivamente el precio de VENTA al público (sellingPrice / salePrice / retailPrice / precio_venta / pvp)
+  // evitando confusiones con precio de lista (MSRP) o costo
   let precioUsd = 0;
 
-  // 1. Prioridad: 'sellingPrice' o 'salePrice' o 'retailPrice' en la raíz del producto ERP
+  // 1. Prioridad absoluta: precio de venta activo en raíz del producto ERP
   const rootSellingCandidates = [
     item.sellingPrice,
     item.salePrice,
-    item.retailPrice,
     item.precio_venta,
-    item.precio_usd
+    item.pvp,
+    item.retailPrice,
+    item.precio_usd,
+    item.price_usd,
+    item.finalPrice,
+    item.specialPrice
   ];
 
   for (const cand of rootSellingCandidates) {
@@ -230,15 +236,18 @@ function parseFinapartnerItem(item) {
     }
   }
 
-  // 2. Si no se encontró en la raíz, buscar 'sellingPrice' o 'salePrice' en las sub-variantes
+  // 2. Si no se encontró en la raíz, buscar precio de venta activo en las sub-variantes
   if (precioUsd === 0 && Array.isArray(item.items) && item.items.length > 0) {
     for (const sub of item.items) {
       const subSellingCandidates = [
         sub.sellingPrice,
         sub.salePrice,
-        sub.retailPrice,
         sub.precio_venta,
-        sub.precio_usd
+        sub.pvp,
+        sub.retailPrice,
+        sub.precio_usd,
+        sub.price_usd,
+        sub.finalPrice
       ];
       for (const cand of subSellingCandidates) {
         if (cand !== undefined && cand !== null && Number(cand) > 0) {
@@ -250,9 +259,9 @@ function parseFinapartnerItem(item) {
     }
   }
 
-  // 3. Fallback final si no existe ninguna de las anteriores
+  // 3. Fallback a 'price' sólo si no existe ningún precio de venta activo explícito
   if (precioUsd === 0) {
-    precioUsd = Number(item.sellingPrice || item.salePrice || item.precio_usd || item.price || 0);
+    precioUsd = Number(item.sellingPrice || item.salePrice || item.precio_venta || item.precio_usd || item.price || 0);
   }
 
   // Mapa de color -> mapa de talla
@@ -331,6 +340,64 @@ function parseFinapartnerItem(item) {
 }
 
 /**
+ * Consolida ítems planos de catálogo por ID de Modelo
+ */
+function aggregateProductModels(parsedItems) {
+  const modelMap = new Map();
+
+  for (const item of parsedItems) {
+    const key = item.id;
+    if (!modelMap.has(key)) {
+      modelMap.set(key, { ...item });
+    } else {
+      const existing = modelMap.get(key);
+      const colorMap = new Map();
+
+      const addGroup = (group) => {
+        if (!colorMap.has(group.color)) {
+          colorMap.set(group.color, new Map());
+        }
+        const sMap = colorMap.get(group.color);
+        (group.tallas || []).forEach(t => {
+          if (!sMap.has(t.talla)) {
+            sMap.set(t.talla, { ...t });
+          } else {
+            const existingT = sMap.get(t.talla);
+            existingT.stock = Math.max(existingT.stock, t.stock);
+          }
+        });
+      };
+
+      (existing.colores || []).forEach(addGroup);
+      (item.colores || []).forEach(addGroup);
+
+      const sizeOrder = { 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6 };
+      const newColores = [];
+      let newTotalStock = 0;
+      const flatVariantes = [];
+
+      for (const [cName, sMap] of colorMap.entries()) {
+        const tallas = Array.from(sMap.values()).sort((a, b) => (sizeOrder[a.talla] || 99) - (sizeOrder[b.talla] || 99));
+        const cStock = tallas.reduce((acc, t) => acc + t.stock, 0);
+        newTotalStock += cStock;
+        tallas.forEach(t => flatVariantes.push(t));
+        newColores.push({ color: cName, total_color_stock: cStock, tallas });
+      }
+
+      existing.colores = newColores;
+      existing.variantes = flatVariantes;
+      existing.total_stock = newTotalStock;
+
+      if (item.precio_usd > 0 && (existing.precio_usd === 0 || existing.precio_usd > item.precio_usd)) {
+        existing.precio_usd = item.precio_usd;
+      }
+    }
+  }
+
+  return Array.from(modelMap.values());
+}
+
+/**
  * Obtiene el inventario del ERP, agrupa las prendas por modelo y lo guarda en KV
  */
 async function syncCatalog(env, throwOnError = false) {
@@ -351,14 +418,16 @@ async function syncCatalog(env, throwOnError = false) {
     }
 
     if (rawItems.length > 0) {
-      groupedCatalog = rawItems.map(item => parseFinapartnerItem(item));
+      const parsedList = rawItems.map(item => parseFinapartnerItem(item));
+      groupedCatalog = aggregateProductModels(parsedList);
     } else {
       throw new Error('Respuesta de inventario vacía');
     }
   } catch (err) {
     console.warn('[Catalog Sync] No se pudo conectar al ERP real, utilizando mock de respaldo:', err.message);
     if (throwOnError) throw err;
-    groupedCatalog = getMockErpInventory().map(item => parseFinapartnerItem(item));
+    const parsedList = getMockErpInventory().map(item => parseFinapartnerItem(item));
+    groupedCatalog = aggregateProductModels(parsedList);
   }
 
   // Guardar catálogo procesado y timestamp de actualización en KV
@@ -460,7 +529,8 @@ async function handleGetStock(url, env) {
 
   // Synonyms map para búsqueda avanzada en Worker API
   const SYNONYMS_MAP = {
-    'tshirt': 'franela', 't-shirt': 'franela', 'remera': 'franela', 'playera': 'franela', 'camisa': 'franela', 'franelas': 'franela',
+    'camisa': 'camisa', 'camisas': 'camisa', 'shirt': 'camisa', 'shirts': 'camisa',
+    'tshirt': 'franela', 't-shirt': 'franela', 'remera': 'franela', 'playera': 'franela', 'franela': 'franela', 'franelas': 'franela',
     'pantalon': 'pantalon', 'pantalones': 'pantalon', 'jean': 'pantalon', 'jeans': 'pantalon', 'denim': 'pantalon', 'pants': 'pantalon',
     'chaqueta': 'chaqueta', 'chaquetas': 'chaqueta', 'sueter': 'chaqueta', 'hoodie': 'chaqueta', 'abrigo': 'chaqueta',
     'mono': 'mono', 'monos': 'mono', 'jogger': 'mono', 'short': 'short', 'shorts': 'short',
@@ -655,6 +725,10 @@ function getMockErpInventory() {
 
     { id: '303-S', modelo_id: 'MOD-303', nombre: 'Chaqueta Bomber Urban', categoria: 'Chaquetas', talla: 'S', stock: 1, precio_usd: 50, sku: 'CHQ-BMB-S' },
     { id: '303-M', modelo_id: 'MOD-303', nombre: 'Chaqueta Bomber Urban', categoria: 'Chaquetas', talla: 'M', stock: 0, precio_usd: 50, sku: 'CHQ-BMB-M' },
-    { id: '303-L', modelo_id: 'MOD-303', nombre: 'Chaqueta Bomber Urban', categoria: 'Chaquetas', talla: 'L', stock: 3, precio_usd: 50, sku: 'CHQ-BMB-L' }
+    { id: '303-L', modelo_id: 'MOD-303', nombre: 'Chaqueta Bomber Urban', categoria: 'Chaquetas', talla: 'L', stock: 3, precio_usd: 50, sku: 'CHQ-BMB-L' },
+
+    { id: '404-S', modelo_id: 'MOD-404', nombre: 'Camisa Prestige', categoria: 'Camisas', talla: 'S', stock: 4, sellingPrice: 30, price: 45, precio_usd: 30, sku: 'CAM-PRS-S' },
+    { id: '404-M', modelo_id: 'MOD-404', nombre: 'Camisa Prestige', categoria: 'Camisas', talla: 'M', stock: 6, sellingPrice: 30, price: 45, precio_usd: 30, sku: 'CAM-PRS-M' },
+    { id: '404-L', modelo_id: 'MOD-404', nombre: 'Camisa Prestige', categoria: 'Camisas', talla: 'L', stock: 2, sellingPrice: 30, price: 45, precio_usd: 30, sku: 'CAM-PRS-L' }
   ];
 }

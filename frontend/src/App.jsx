@@ -346,6 +346,29 @@ function getInitialMockCatalog() {
         { talla: 'M', stock: 0, sku: 'CHQ-BMB-M' },
         { talla: 'L', stock: 3, sku: 'CHQ-BMB-L' }
       ]
+    },
+    {
+      id: 'MOD-404',
+      nombre: 'Camisa Prestige',
+      categoria: 'Camisas',
+      precio_usd: 30,
+      total_stock: 12,
+      colores: [
+        {
+          color: 'GENERAL',
+          total_color_stock: 12,
+          tallas: [
+            { talla: 'S', stock: 4, sku: 'CAM-PRS-S' },
+            { talla: 'M', stock: 6, sku: 'CAM-PRS-M' },
+            { talla: 'L', stock: 2, sku: 'CAM-PRS-L' }
+          ]
+        }
+      ],
+      variantes: [
+        { talla: 'S', stock: 4, sku: 'CAM-PRS-S' },
+        { talla: 'M', stock: 6, sku: 'CAM-PRS-M' },
+        { talla: 'L', stock: 2, sku: 'CAM-PRS-L' }
+      ]
     }
   ];
 }

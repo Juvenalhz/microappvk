@@ -9,7 +9,10 @@ export const COLOR_CANONICAL_SET = new Set([
  * Diccionario de Sinónimos y Alias para Tienda Retail (Venezuela)
  */
 export const SYNONYMS_MAP = {
-  // Categorías
+  'camisa': 'camisa',
+  'camisas': 'camisa',
+  'shirt': 'camisa',
+  'shirts': 'camisa',
   'tshirt': 'franela',
   't-shirt': 'franela',
   'tshirts': 'franela',
@@ -18,8 +21,6 @@ export const SYNONYMS_MAP = {
   'remeras': 'franela',
   'playera': 'franela',
   'playeras': 'franela',
-  'camisa': 'franela',
-  'camisas': 'franela',
   'franela': 'franela',
   'franelas': 'franela',
   
