@@ -103,11 +103,16 @@ export default function PagoMovilModule({ bcvRate }) {
 
   const activeAccount = selectedAccount || bankAccounts[0];
 
+  const WORKER_PAGO_MOVIL_URL = 'https://microapp-vk-bff.jjhernandezz100.workers.dev/api/pago-movil';
+
   // Sincronizar cuentas e imágenes de QR desde la nube (Worker KV) al cargar
   useEffect(() => {
     async function syncAccountsFromKv() {
       try {
-        const res = await fetch(`/api/pago-movil?t=${Date.now()}`, { cache: 'no-store' });
+        let res = await fetch(`${WORKER_PAGO_MOVIL_URL}?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) {
+          res = await fetch(`/api/pago-movil?t=${Date.now()}`, { cache: 'no-store' });
+        }
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.accounts) && data.accounts.length > 0) {
@@ -127,11 +132,18 @@ export default function PagoMovilModule({ bcvRate }) {
     setBankAccounts(newAccounts);
     try {
       localStorage.setItem('vk_pago_movil_accounts', JSON.stringify(newAccounts));
-      const res = await fetch('/api/pago-movil', {
+      let res = await fetch(WORKER_PAGO_MOVIL_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accounts: newAccounts })
       });
+      if (!res.ok) {
+        res = await fetch('/api/pago-movil', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accounts: newAccounts })
+        });
+      }
       if (res.ok) {
         console.log('[PagoMovil] Cuentas e imágenes sincronizadas con éxito en la nube KV');
       }
