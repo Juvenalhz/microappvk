@@ -76,6 +76,16 @@ export default {
         return await handleGetKpis(url, env);
       }
 
+      // Ruta: GET /api/pago-movil (Obtiene cuentas y fotos QR sincronizadas)
+      if (url.pathname === '/api/pago-movil' && method === 'GET') {
+        return await handleGetPagoMovil(env);
+      }
+
+      // Ruta: POST /api/pago-movil (Guarda cuentas y fotos QR globalmente)
+      if (url.pathname === '/api/pago-movil' && method === 'POST') {
+        return await handlePostPagoMovil(request, env);
+      }
+
 
 
       // Ruta debug flexible para probar endpoints ERP
@@ -1708,4 +1718,37 @@ function processKpiData(data, catalog, bcvData) {
     topProducts: Array.from(productMap.values()).sort((a, b) => b.units - a.units).slice(0, 10),
     topCategories: Array.from(categoryMap.values()).sort((a, b) => b.totalUsd - a.totalUsd)
   };
+}
+
+/**
+ * GET /api/pago-movil - Obtiene cuentas bancarias e imágenes QR guardadas en KV
+ */
+async function handleGetPagoMovil(env) {
+  try {
+    const raw = await env.STORE_KV.get('pago_movil_accounts');
+    if (raw) {
+      const accounts = JSON.parse(raw);
+      return new Response(JSON.stringify({ success: true, accounts }), { headers: corsHeaders });
+    }
+  } catch (e) {
+    console.warn('[PagoMovil KV GET] Error:', e);
+  }
+  return new Response(JSON.stringify({ success: true, accounts: [] }), { headers: corsHeaders });
+}
+
+/**
+ * POST /api/pago-movil - Guarda cuentas bancarias e imágenes QR en KV para todos los dispositivos
+ */
+async function handlePostPagoMovil(request, env) {
+  try {
+    const body = await request.json();
+    const accounts = Array.isArray(body) ? body : (body.accounts || []);
+    if (Array.isArray(accounts)) {
+      await env.STORE_KV.put('pago_movil_accounts', JSON.stringify(accounts));
+      return new Response(JSON.stringify({ success: true, message: 'Cuentas e imágenes de QR sincronizadas globalmente' }), { headers: corsHeaders });
+    }
+  } catch (e) {
+    return new Response(JSON.stringify({ success: false, error: e.message }), { status: 400, headers: corsHeaders });
+  }
+  return new Response(JSON.stringify({ success: false, error: 'Payload inválido' }), { status: 400, headers: corsHeaders });
 }
