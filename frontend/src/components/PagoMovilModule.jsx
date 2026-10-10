@@ -103,11 +103,35 @@ export default function PagoMovilModule({ bcvRate }) {
 
   const activeAccount = selectedAccount || bankAccounts[0];
 
-  // Persistir cuentas bancarias
-  const saveAccounts = (newAccounts) => {
+  // Sincronizar cuentas e imágenes de QR desde la nube (Worker KV) al cargar
+  useEffect(() => {
+    async function syncAccountsFromKv() {
+      try {
+        const res = await fetch('/api/pago-movil');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.accounts) && data.accounts.length > 0) {
+            setBankAccounts(data.accounts);
+            localStorage.setItem('vk_pago_movil_accounts', JSON.stringify(data.accounts));
+          }
+        }
+      } catch (e) {
+        console.warn('[PagoMovil] Error al obtener cuentas sincronizadas:', e);
+      }
+    }
+    syncAccountsFromKv();
+  }, []);
+
+  // Persistir cuentas bancarias localmente y en la nube (KV Global)
+  const saveAccounts = async (newAccounts) => {
     setBankAccounts(newAccounts);
     try {
       localStorage.setItem('vk_pago_movil_accounts', JSON.stringify(newAccounts));
+      fetch('/api/pago-movil', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accounts: newAccounts })
+      }).catch(err => console.warn('[PagoMovil] Sync error:', err));
     } catch (e) {
       console.warn('[PagoMovil] Error al guardar cuentas:', e);
     }
