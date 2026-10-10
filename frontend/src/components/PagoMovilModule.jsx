@@ -44,6 +44,153 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
     }
   };
 
+  // Campos de Monto a cobrar
+  const [montoUsd, setMontoUsd] = useState(initialAmountUsd || '');
+  const [montoBs, setMontoBs] = useState('');
+
+  const rawTasa = bcvRate ? Number(bcvRate.tasa) : 876.79;
+  const tasa = Math.floor(rawTasa * 100) / 100;
+
+  // Cuentas de Pago Móvil precacheadas y editables por la tienda
+  const [bankAccounts, setBankAccounts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vk_pago_movil_accounts');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('[PagoMovil] Error al leer cuentas guardadas:', e);
+    }
+    return [
+      {
+        id: 1,
+        banco: "0102 - Banco de Venezuela",
+        codigoBanco: "0102",
+        rif: "V-23654575",
+        cedulaNumero: "23654575",
+        telefono: "04241346969",
+        telefonoFormateado: "0424-1346969",
+        titular: "VK MEN Tienda",
+        color: "from-blue-600 to-indigo-700",
+        badge: "Principal (BDV)"
+      },
+      {
+        id: 2,
+        banco: "0134 - Banesco",
+        codigoBanco: "0134",
+        rif: "J-500123456",
+        cedulaNumero: "500123456",
+        telefono: "04129876543",
+        telefonoFormateado: "0412-9876543",
+        titular: "VK MEN C.A.",
+        color: "from-emerald-600 to-teal-700",
+        badge: "Secundaria (Banesco)"
+      }
+    ];
+  });
+
+  const activeAccount = selectedAccount || bankAccounts[0];
+
+  // Persistir cuentas bancarias
+  const saveAccounts = (newAccounts) => {
+    setBankAccounts(newAccounts);
+    try {
+      localStorage.setItem('vk_pago_movil_accounts', JSON.stringify(newAccounts));
+    } catch (e) {
+      console.warn('[PagoMovil] Error al guardar cuentas:', e);
+    }
+  };
+
+  // Cálculo automático entre USD y Bs
+  const handleUsdChange = (val) => {
+    setMontoUsd(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0) {
+      const calculatedBs = (num * tasa).toFixed(2);
+      setMontoBs(calculatedBs);
+    } else {
+      setMontoBs('');
+    }
+  };
+
+  const handleBsChange = (val) => {
+    setMontoBs(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0 && tasa > 0) {
+      const calculatedUsd = (num / tasa).toFixed(2);
+      setMontoUsd(calculatedUsd);
+    } else {
+      setMontoUsd('');
+    }
+  };
+
+  const handleCopyAccount = (acc, index) => {
+    const bsText = montoBs ? `\nMonto a pagar: ${montoBs} Bs.` : '';
+    const textToCopy = `PAGO MÓVIL:\nBanco: ${acc.banco}\nCédula/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}\nTitular: ${acc.titular}${bsText}`;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const openQrForAccount = (acc) => {
+    setSelectedAccount(acc);
+    setIsQrModalOpen(true);
+  };
+
+  const openEditModal = (acc = null) => {
+    if (acc) {
+      setEditingAccount({ ...acc });
+    } else {
+      setEditingAccount({
+        id: Date.now(),
+        banco: "0102 - Banco de Venezuela",
+        codigoBanco: "0102",
+        rif: "V-00000000",
+        cedulaNumero: "00000000",
+        telefono: "04140000000",
+        telefonoFormateado: "0414-0000000",
+        titular: "Nombre del Titular",
+        color: "from-blue-600 to-indigo-700",
+        badge: "Cuenta Adicional"
+      });
+    }
+    setIsEditAccountModalOpen(true);
+  };
+
+  const handleSaveAccountForm = (e) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+
+    const exists = bankAccounts.some(a => a.id === editingAccount.id);
+    let updated = [];
+    if (exists) {
+      updated = bankAccounts.map(a => a.id === editingAccount.id ? editingAccount : a);
+    } else {
+      updated = [...bankAccounts, editingAccount];
+    }
+
+    saveAccounts(updated);
+    if (selectedAccount && selectedAccount.id === editingAccount.id) {
+      setSelectedAccount(editingAccount);
+    }
+    setIsEditAccountModalOpen(false);
+  };
+
+  const handleDeleteAccount = (id) => {
+    if (bankAccounts.length <= 1) {
+      alert('Debe haber al menos una cuenta registrada.');
+      return;
+    }
+    if (confirm('¿Deseas eliminar esta cuenta de Pago Móvil?')) {
+      const updated = bankAccounts.filter(a => a.id !== id);
+      saveAccounts(updated);
+      if (selectedAccount && selectedAccount.id === id) {
+        setSelectedAccount(updated[0]);
+      }
+    }
+  };
+
   // Genera el payload QR según el estándar o formato de prueba seleccionado
   const getQrPayload = (acc, mode = qrFormatMode) => {
     if (!acc) return '';
