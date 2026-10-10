@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   CreditCard, 
   Copy, 
@@ -12,12 +12,53 @@ import {
   Building2, 
   Plus, 
   Edit3, 
-  Share2, 
   Calculator, 
   DollarSign,
-  AlertCircle
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  Sparkles
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+
+// Helper para comprimir y convertir imágenes a Base64 liviano
+function processImageFile(file, callback) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 900;
+      const MAX_HEIGHT = 900;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Calidad 0.85 en WebP / JPEG
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      callback(dataUrl);
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 
 export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
@@ -26,24 +67,6 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
   const [editingAccount, setEditingAccount] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
 
-  // Formato del QR Interbancario (9 Variantes de prueba)
-  const [qrFormatMode, setQrFormatMode] = useState(() => {
-    try {
-      return localStorage.getItem('vk_pago_movil_qr_format') || 'suiche7b_std';
-    } catch (e) {
-      return 'suiche7b_std';
-    }
-  });
-
-  const saveQrFormat = (mode) => {
-    setQrFormatMode(mode);
-    try {
-      localStorage.setItem('vk_pago_movil_qr_format', mode);
-    } catch (e) {
-      console.warn('[PagoMovil] Error al guardar formato QR:', e);
-    }
-  };
-
   // Campos de Monto a cobrar
   const [montoUsd, setMontoUsd] = useState(initialAmountUsd || '');
   const [montoBs, setMontoBs] = useState('');
@@ -51,7 +74,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
   const rawTasa = bcvRate ? Number(bcvRate.tasa) : 876.79;
   const tasa = Math.floor(rawTasa * 100) / 100;
 
-  // Cuentas de Pago Móvil precacheadas y editables por la tienda
+  // Cuentas de Pago Móvil guardadas en localStorage
   const [bankAccounts, setBankAccounts] = useState(() => {
     try {
       const cached = localStorage.getItem('vk_pago_movil_accounts');
@@ -68,25 +91,24 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
         banco: "0102 - Banco de Venezuela",
         codigoBanco: "0102",
         rif: "V-23654575",
-        cedulaNumero: "23654575",
         telefono: "04241346969",
         telefonoFormateado: "0424-1346969",
         titular: "VK MEN Tienda",
         color: "from-blue-600 to-indigo-700",
         badge: "Principal (BDV)",
-        bdvToken: "jLLo+CSIEzh94qhKZk++ZEDapZ4ijsatoBMJxjr1RpvUVrotlV4e99cF4bF1J0Sk8baMxxYi6Vhzij9NRxQyvfTKUZQ1MPHAyoQw3cwHlZU+UYACwmOy+N3iES1QbS4uOnZUapHM9baN/b2Sh9SXpdNfSPTN1StajR1cDPBvHlqL19D0eJcw0K2XLL2HKgxp?merchantId=0102&strong_id=1791657406-1"
+        qrImage: null
       },
       {
         id: 2,
         banco: "0134 - Banesco",
         codigoBanco: "0134",
         rif: "J-500123456",
-        cedulaNumero: "500123456",
         telefono: "04129876543",
         telefonoFormateado: "0412-9876543",
         titular: "VK MEN C.A.",
         color: "from-emerald-600 to-teal-700",
-        badge: "Secundaria (Banesco)"
+        badge: "Secundaria (Banesco)",
+        qrImage: null
       }
     ];
   });
@@ -148,12 +170,12 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
         banco: "0102 - Banco de Venezuela",
         codigoBanco: "0102",
         rif: "V-00000000",
-        cedulaNumero: "00000000",
         telefono: "04140000000",
         telefonoFormateado: "0414-0000000",
         titular: "Nombre del Titular",
         color: "from-blue-600 to-indigo-700",
-        badge: "Cuenta Adicional"
+        badge: "Cuenta Adicional",
+        qrImage: null
       });
     }
     setIsEditAccountModalOpen(true);
@@ -192,69 +214,20 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
     }
   };
 
-  // Genera el payload QR según el estándar o formato de prueba seleccionado
-  const getQrPayload = (acc, mode = qrFormatMode) => {
-    if (!acc) return '';
-    const cleanPhone = acc.telefono.replace(/[^0-9]/g, '');
-    const cleanDocWithLetter = acc.rif.replace(/[^0-9VJEGvjeg]/g, '').toUpperCase();
-    const cleanDocNum = acc.rif.replace(/[^0-9]/g, '');
-    const bankCode = acc.codigoBanco || '0102';
-    const amountVal = parseFloat(montoBs);
-    const amountFormatted = !isNaN(amountVal) && amountVal > 0 ? amountVal.toFixed(2) : '0.00';
-
-    switch (mode) {
-      case 'bdv_official':
-        const rawBdvToken = acc.bdvToken || 'jLLo+CSIEzh94qhKZk++ZEDapZ4ijsatoBMJxjr1RpvUVrotlV4e99cF4bF1J0Sk8baMxxYi6Vhzij9NRxQyvfTKUZQ1MPHAyoQw3cwHlZU+UYACwmOy+N3iES1QbS4uOnZUapHM9baN/b2Sh9SXpdNfSPTN1StajR1cDPBvHlqL19D0eJcw0K2XLL2HKgxp?merchantId=0102&strong_id=1791657406-1';
-        if (amountVal > 0) {
-          return `${rawBdvToken}&monto=${amountFormatted}`;
+  // Cargar imagen de QR desde el modal o la tarjeta
+  const handleFileUploadForAccount = (file, accountId) => {
+    processImageFile(file, (dataUrl) => {
+      const updated = bankAccounts.map(acc => {
+        if (acc.id === accountId) {
+          return { ...acc, qrImage: dataUrl };
         }
-        return rawBdvToken;
-      case 'suiche7b_std':
-        return JSON.stringify({
-          banco: bankCode,
-          doc: cleanDocWithLetter,
-          telefono: cleanPhone,
-          monto: amountFormatted
-        });
-      case 'suiche7b_nodocletter':
-        return JSON.stringify({
-          banco: bankCode,
-          doc: cleanDocNum,
-          telefono: cleanPhone,
-          monto: amountFormatted
-        });
-      case 'suiche7b_short':
-        return JSON.stringify({
-          b: bankCode,
-          c: cleanDocWithLetter,
-          t: cleanPhone,
-          m: amountFormatted
-        });
-      case 'suiche7b_short_nodocletter':
-        return JSON.stringify({
-          b: bankCode,
-          c: cleanDocNum,
-          t: cleanPhone,
-          m: amountFormatted
-        });
-      case 'bdv_pipe':
-        return `${bankCode}|${cleanDocWithLetter}|${cleanPhone}|${amountFormatted}`;
-      case 'bdv_pipe_nodocletter':
-        return `${bankCode}|${cleanDocNum}|${cleanPhone}|${amountFormatted}`;
-      case 'c2p_prefix':
-        return `C2P|${bankCode}|${cleanDocWithLetter}|${cleanPhone}|${amountFormatted}`;
-      case 'uri_pagomovil':
-        return `pagomovil://${bankCode}?doc=${cleanDocWithLetter}&phone=${cleanPhone}&amount=${amountFormatted}`;
-      case 'readable':
-        return `PAGO MOVIL\nBanco: ${acc.banco}\nCI/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}${amountVal > 0 ? `\nMonto: ${amountFormatted} Bs` : ''}`;
-      default:
-        return JSON.stringify({
-          banco: bankCode,
-          doc: cleanDocWithLetter,
-          telefono: cleanPhone,
-          monto: amountFormatted
-        });
-    }
+        return acc;
+      });
+      saveAccounts(updated);
+      if (selectedAccount && selectedAccount.id === accountId) {
+        setSelectedAccount(prev => ({ ...prev, qrImage: dataUrl }));
+      }
+    });
   };
 
   return (
@@ -268,7 +241,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
           </div>
           <div>
             <h2 className="text-sm sm:text-base font-extrabold text-white leading-tight">Pago Móvil en Caja</h2>
-            <p className="text-[11px] sm:text-xs text-slate-400">QR Interbancario Suiche 7B & BDV C2P</p>
+            <p className="text-[11px] sm:text-xs text-slate-400">Códigos QR e Imagen de Afiche Oficial</p>
           </div>
         </div>
 
@@ -287,17 +260,17 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center space-x-1.5 transition-all shadow-md active:scale-95"
           >
             <QrCode className="w-4 h-4" />
-            <span>Generar QR</span>
+            <span>Ver QR</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Calculadora / Input de Monto a Cobrar */}
+      {/* 2. Calculadora de Cobro USD ↔ Bs */}
       <div className="bg-gradient-to-r from-slate-900 via-surface-card to-[#111827] border border-amber-500/30 rounded-2xl p-3.5 sm:p-4 shadow-xl space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center space-x-1.5">
             <Calculator className="w-4 h-4 text-amber-400" />
-            <span>Total a Cobrar (Genera QR con Monto)</span>
+            <span>Calculadora de Cobro en Caja</span>
           </span>
           <span className="text-[10px] font-mono text-slate-400">
             Tasa BCV: <strong className="text-amber-400">{tasa.toFixed(2)} Bs</strong>
@@ -322,9 +295,9 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             </div>
           </div>
 
-          {/* Input Bs (Auto-Calculado) */}
+          {/* Input Bs */}
           <div className="bg-slate-950/80 p-2.5 rounded-xl border border-amber-500/40">
-            <label className="text-[10px] text-amber-300 font-bold block uppercase mb-1">Monto en Bs (Total QR)</label>
+            <label className="text-[10px] text-amber-300 font-bold block uppercase mb-1">Monto a Cobrar (Bs)</label>
             <div className="flex items-center space-x-1">
               <span className="text-amber-400 font-bold text-xs">Bs.</span>
               <input
@@ -341,14 +314,14 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
         </div>
       </div>
 
-      {/* 3. Tarjetas Bancarias */}
+      {/* 3. Tarjetas de Cuentas Bancarias */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {bankAccounts.map((acc, index) => (
           <div 
             key={acc.id}
             className="bg-surface-card border border-surface-cardBorder rounded-2xl p-4 shadow-xl shadow-black/25 relative overflow-hidden flex flex-col justify-between space-y-3"
           >
-            {/* Gradiente decorativo */}
+            {/* Adorno visual */}
             <div className={`absolute top-0 right-0 w-28 h-28 bg-gradient-to-br ${acc.color || 'from-amber-500 to-amber-700'} opacity-15 rounded-bl-full pointer-events-none`} />
 
             <div>
@@ -367,7 +340,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                   <button
                     onClick={() => openEditModal(acc)}
                     className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
-                    title="Editar datos de esta cuenta"
+                    title="Editar datos e imagen de QR"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
@@ -375,11 +348,49 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                   <button
                     onClick={() => openQrForAccount(acc)}
                     className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/40 transition-all active:scale-95"
-                    title="Generar QR Escaneable"
+                    title="Ver QR de esta cuenta"
                   >
                     <QrCode className="w-4 h-4" />
                   </button>
                 </div>
+              </div>
+
+              {/* Vista previa de Imagen de QR o Botón de carga rápida */}
+              <div className="my-2">
+                {acc.qrImage ? (
+                  <div 
+                    onClick={() => openQrForAccount(acc)}
+                    className="bg-slate-950/80 p-2 rounded-xl border border-emerald-500/30 flex items-center space-x-3 cursor-pointer hover:border-emerald-400 transition-all group"
+                  >
+                    <img 
+                      src={acc.qrImage} 
+                      alt="QR Bancario" 
+                      className="w-12 h-12 object-contain bg-white rounded-lg p-1 border border-slate-700 group-hover:scale-105 transition-transform"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mb-0.5 border border-emerald-500/20">
+                        ✓ QR Oficial Cargado
+                      </span>
+                      <p className="text-[11px] text-slate-300 font-medium truncate">Toca para ampliar y mostrar al cliente</p>
+                    </div>
+                    <Maximize2 className="w-4 h-4 text-slate-400 group-hover:text-amber-400 shrink-0" />
+                  </div>
+                ) : (
+                  <label className="bg-slate-950/40 hover:bg-slate-900 border border-dashed border-slate-700 hover:border-amber-500/50 p-2.5 rounded-xl flex items-center justify-center space-x-2 cursor-pointer transition-all text-xs text-slate-400 hover:text-amber-300">
+                    <Upload className="w-4 h-4 text-amber-400" />
+                    <span className="font-bold text-[11px]">Subir foto / captura del QR oficial</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleFileUploadForAccount(e.target.files[0], acc.id);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
               </div>
 
               {/* Grid de Datos Bancarios */}
@@ -435,17 +446,17 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
 
               <button
                 onClick={() => openQrForAccount(acc)}
-                className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-amber-400 text-xs font-bold hover:bg-slate-800 transition-all flex items-center space-x-1"
+                className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500 hover:text-slate-950 transition-all flex items-center space-x-1"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
-                <span>Ver QR</span>
+                <span>Ampliar QR</span>
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* 4. MODAL PANTALLA COMPLETA: GENERADOR DE QR INTERBANCARIO SUICHE 7B */}
+      {/* 4. MODAL PANTALLA COMPLETA: VISUALIZADOR DEL QR */}
       {isQrModalOpen && activeAccount && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 animate-fade-in overflow-y-auto">
           
@@ -456,15 +467,15 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             <X className="w-6 h-6" />
           </button>
 
-          <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center space-y-3.5 animate-scale-in my-auto">
+          <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center space-y-4 animate-scale-in my-auto">
             
-            {/* Header Modal Estilo Banco / Suiche 7B */}
+            {/* Header Modal */}
             <div className="space-y-1">
-              <div className="inline-flex items-center space-x-1.5 bg-rose-50 px-3 py-1 rounded-full border border-rose-200 text-rose-700 text-[10px] font-black uppercase tracking-wider">
-                <span>Suiche 7B / C2P Interbancario</span>
-              </div>
-              <h3 className="font-black text-slate-900 text-lg sm:text-xl leading-tight">PAGO MÓVIL RÁPIDO</h3>
-              <p className="text-xs text-slate-500 font-medium">Escanea directamente desde la app de tu banco</p>
+              <span className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-block">
+                {activeAccount.banco}
+              </span>
+              <h3 className="font-black text-slate-900 text-lg sm:text-xl leading-tight">PAGO MÓVIL</h3>
+              <p className="text-xs text-slate-500 font-medium">Escanea la imagen con la app de tu banco</p>
             </div>
 
             {/* Display Monto a Cobrar en Bs */}
@@ -480,122 +491,32 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
               )}
             </div>
 
-            {/* Contenedor del QR Real SVG */}
-            <div className="w-64 h-64 sm:w-68 sm:h-68 mx-auto bg-white p-3 rounded-2xl border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner relative">
-              <QRCodeSVG 
-                value={getQrPayload(activeAccount)} 
-                size={220}
-                level="M"
-                includeMargin={true}
-              />
-              {/* Insignia central estilizada Suiche 7B */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="bg-white border-2 border-rose-600 px-2 py-0.5 rounded-md shadow-md text-[9px] font-black text-rose-700 tracking-tighter">
-                  7B
+            {/* Visualizador Principal del QR (Imagen o Generado) */}
+            <div className="mx-auto bg-white p-3 rounded-2xl border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner relative min-h-[240px]">
+              {activeAccount.qrImage ? (
+                <div className="space-y-2">
+                  <img 
+                    src={activeAccount.qrImage} 
+                    alt="QR Oficial" 
+                    className="max-h-72 w-auto object-contain rounded-xl shadow"
+                  />
+                  <div className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-block">
+                    ✓ Imagen de Afiche Oficial BDV / Banco
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            {/* 🧪 LABORATORIO DE PRUEBAS CONTROLADAS */}
-            <div className="space-y-2 text-left bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1">
-                  <span>🧪 Laboratorio de Formatos QR:</span>
-                </span>
-                <button
-                  onClick={() => saveQrFormat(qrFormatMode)}
-                  className="text-[10px] font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded-lg transition-all flex items-center space-x-1 shadow-sm"
-                  title="Guardar este formato como predeterminado"
-                >
-                  <Check className="w-3 h-3" />
-                  <span>Guardar por Defecto</span>
-                </button>
-              </div>
-
-              <p className="text-[10px] text-slate-500 font-medium leading-snug">
-                Escanea con la app de tu banco. Haz clic en cada variante hasta que tu app autocomplete el banco, cédula, teléfono y monto:
-              </p>
-
-              <div className="grid grid-cols-2 gap-1 text-[10px] font-bold">
-                <button
-                  onClick={() => setQrFormatMode('bdv_official')}
-                  className={`col-span-2 py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'bdv_official' ? 'bg-emerald-600 text-white font-black shadow' : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-300'
-                  }`}
-                >
-                  ⭐ BDV Token Oficial (BDVenlínea)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('suiche7b_std')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'suiche7b_std' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  1. Suiche 7B (JSON V/J)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('suiche7b_nodocletter')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'suiche7b_nodocletter' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  2. Suiche 7B (JSON N°)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('suiche7b_short')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'suiche7b_short' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  3. JSON Corto (b,c,t,m)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('suiche7b_short_nodocletter')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'suiche7b_short_nodocletter' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  4. JSON Corto (N°)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('bdv_pipe')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'bdv_pipe' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  5. BDV Pipe (0102|V..)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('bdv_pipe_nodocletter')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'bdv_pipe_nodocletter' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  6. BDV Pipe (Sólo N°)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('c2p_prefix')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'c2p_prefix' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  7. C2P Pipe (C2P|01..)
-                </button>
-                <button
-                  onClick={() => setQrFormatMode('uri_pagomovil')}
-                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
-                    qrFormatMode === 'uri_pagomovil' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  8. URI pagomovil://
-                </button>
-              </div>
-
-              {/* Inspector de Texto Plano del QR */}
-              <div className="bg-slate-900 text-amber-300 p-2 rounded-xl text-[10px] font-mono break-all border border-slate-800 relative space-y-1">
-                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Texto codificado dentro del QR:</div>
-                <div>{getQrPayload(activeAccount)}</div>
-              </div>
+              ) : (
+                <div className="space-y-3 py-2">
+                  <QRCodeSVG 
+                    value={`PAGO MOVIL\nBanco: ${activeAccount.banco}\nCI/RIF: ${activeAccount.rif}\nTeléfono: ${activeAccount.telefonoFormateado || activeAccount.telefono}${montoBs ? `\nMonto: ${montoBs} Bs` : ''}`} 
+                    size={200}
+                    level="M"
+                    includeMargin={true}
+                  />
+                  <p className="text-[10px] text-slate-500 max-w-[200px] mx-auto font-medium leading-tight">
+                    ¿Tienes la imagen oficial de tu QR? Puedes cargarla abajo para sustituir este gráfico.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Resumen de Datos de la Cuenta */}
@@ -606,26 +527,43 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
               <p className="truncate"><strong>Titular:</strong> {activeAccount.titular}</p>
             </div>
 
-            {/* Botones de Acción */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                onClick={() => {
-                  const text = `PAGO MÓVIL:\nBanco: ${activeAccount.banco}\nCI/RIF: ${activeAccount.rif}\nTeléfono: ${activeAccount.telefonoFormateado || activeAccount.telefono}${montoBs ? `\nMonto: ${montoBs} Bs.` : ''}`;
-                  navigator.clipboard.writeText(text);
-                  alert('¡Datos copiados al portapapeles!');
-                }}
-                className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center justify-center space-x-1"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copiar Datos</span>
-              </button>
+            {/* Botones de Carga de Imagen y Acciones */}
+            <div className="space-y-2 pt-1">
+              <label className="w-full py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs border border-blue-200 transition-all flex items-center justify-center space-x-1.5 cursor-pointer">
+                <Upload className="w-3.5 h-3.5" />
+                <span>{activeAccount.qrImage ? 'Cambiar Foto del QR' : 'Subir Imagen Oficial del QR'}</span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileUploadForAccount(e.target.files[0], activeAccount.id);
+                    }
+                  }}
+                />
+              </label>
 
-              <button
-                onClick={() => setIsQrModalOpen(false)}
-                className="py-2.5 rounded-xl bg-rose-700 text-white font-bold text-xs hover:bg-rose-800 transition-all shadow-md"
-              >
-                Cerrar QR
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    const text = `PAGO MÓVIL:\nBanco: ${activeAccount.banco}\nCI/RIF: ${activeAccount.rif}\nTeléfono: ${activeAccount.telefonoFormateado || activeAccount.telefono}${montoBs ? `\nMonto: ${montoBs} Bs.` : ''}`;
+                    navigator.clipboard.writeText(text);
+                    alert('¡Datos copiados al portapapeles!');
+                  }}
+                  className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center justify-center space-x-1"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copiar Datos</span>
+                </button>
+
+                <button
+                  onClick={() => setIsQrModalOpen(false)}
+                  className="py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-all shadow-md"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
 
           </div>
@@ -633,15 +571,15 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
         </div>
       )}
 
-      {/* 5. MODAL EDICIÓN DE CUENTA BANCARIA */}
+      {/* 5. MODAL EDICIÓN DE CUENTA BANCARIA E IMAGEN QR */}
       {isEditAccountModalOpen && editingAccount && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-[#0f172a] border border-slate-700 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-scale-in text-white">
+          <div className="bg-[#0f172a] border border-slate-700 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-scale-in text-white max-h-[90vh] overflow-y-auto no-scrollbar">
             
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <h3 className="font-extrabold text-sm flex items-center space-x-1.5">
                 <Edit3 className="w-4 h-4 text-amber-400" />
-                <span>Configurar Cuenta Bancaria</span>
+                <span>Configurar Cuenta & QR</span>
               </h3>
               <button
                 onClick={() => setIsEditAccountModalOpen(false)}
@@ -652,6 +590,66 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             </div>
 
             <form onSubmit={handleSaveAccountForm} className="space-y-3 text-xs">
+              
+              {/* Carga de Imagen en la edición */}
+              <div>
+                <label className="text-amber-300 font-bold block mb-1">Imagen del QR Oficial (BDVenlínea / Banco):</label>
+                {editingAccount.qrImage ? (
+                  <div className="bg-slate-900 p-2 rounded-xl border border-slate-700 flex items-center space-x-3">
+                    <img 
+                      src={editingAccount.qrImage} 
+                      alt="QR Cargado" 
+                      className="w-14 h-14 object-contain bg-white rounded-lg p-1"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-bold text-emerald-400">✓ Foto Cargada</span>
+                      <div className="flex space-x-2 mt-1">
+                        <label className="text-[10px] text-blue-400 font-bold hover:underline cursor-pointer">
+                          Cambiar
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                processImageFile(e.target.files[0], (url) => {
+                                  setEditingAccount(prev => ({ ...prev, qrImage: url }));
+                                });
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setEditingAccount(prev => ({ ...prev, qrImage: null }))}
+                          className="text-[10px] text-red-400 font-bold hover:underline"
+                        >
+                          Quitar Foto
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="bg-slate-900 hover:bg-slate-800 border border-dashed border-slate-700 p-3 rounded-xl flex flex-col items-center justify-center space-y-1 cursor-pointer transition-all text-slate-400 hover:text-amber-400">
+                    <ImageIcon className="w-6 h-6 text-amber-400" />
+                    <span className="font-bold text-[11px]">Seleccionar o tomar foto del QR</span>
+                    <span className="text-[9px] text-slate-500">Admite PNG, JPG, WEBP</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          processImageFile(e.target.files[0], (url) => {
+                            setEditingAccount(prev => ({ ...prev, qrImage: url }));
+                          });
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+
               <div>
                 <label className="text-slate-400 font-bold block mb-1">Nombre del Banco & Código:</label>
                 <input
@@ -726,17 +724,6 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                   onChange={(e) => setEditingAccount(prev => ({ ...prev, badge: e.target.value }))}
                   placeholder="ej: Principal (BDV)"
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-amber-300 font-bold block mb-1">Token BDV Oficial / Código QR BDVenlínea (Opcional):</label>
-                <textarea
-                  rows={2}
-                  value={editingAccount.bdvToken || ''}
-                  onChange={(e) => setEditingAccount(prev => ({ ...prev, bdvToken: e.target.value.trim() }))}
-                  placeholder="Pega aquí el texto extraído de tu QR oficial de BDVenlínea..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono text-[10px] focus:outline-none focus:border-amber-400 break-all"
                 />
               </div>
 
