@@ -155,11 +155,6 @@ ${bsNum > 0 ? `----------------------------------
             <h2 className="text-xs sm:text-sm font-black text-white leading-tight">Brecha Cambiaria BCV vs Binance</h2>
             <p className="text-[10px] sm:text-xs text-slate-400 flex items-center space-x-1.5 flex-wrap">
               <span>Consulta en vivo (BCV & Binance P2P)</span>
-              {bcvRate?.fecha_valor && (
-                <span className="text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">
-                  🗓️ {bcvRate.fecha_valor} {bcvRate?.es_fin_de_semana ? '(Próx. Día Hábil)' : ''}
-                </span>
-              )}
             </p>
           </div>
         </div>

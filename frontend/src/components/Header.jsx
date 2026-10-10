@@ -38,13 +38,10 @@ export default function Header({ bcvRate, isOnline, isSyncing, onRefresh, lastSy
           {/* Badge Tasa BCV */}
           <div 
             className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-brand-gold/10 border border-brand-gold/20 text-brand-gold relative"
-            title={bcvRate?.fecha_valor ? `Tasa BCV Oficial (${bcvRate.fecha_valor})` : 'Tasa BCV Oficial'}
+            title="Tasa BCV Oficial"
           >
             <DollarSign className="w-3.5 h-3.5" />
             <span className="text-xs font-bold">{formattedRate} <span className="text-[10px] font-normal opacity-80">Bs/$</span></span>
-            {bcvRate?.es_fin_de_semana && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="Tasa BCV del próximo día hábil activa" />
-            )}
           </div>
 
           {/* Botón Ticket de Venta activo */}

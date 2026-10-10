@@ -91,7 +91,7 @@ export default function TicketModal({ isOpen, onClose, ticketItems, setTicketIte
       totalsSection += `🛵 Delivery: $${deliveryUsd.toFixed(2)} USD\n`;
     }
     totalsSection += `💵 Total USD: $${totalUsd.toFixed(2)} USD\n`;
-    totalsSection += `🏛️ Tasa BCV Oficial: ${tasa.toFixed(2)} Bs${bcvRate?.fecha_valor ? ` (${bcvRate.fecha_valor})` : ''}\n`;
+    totalsSection += `🏛️ Tasa BCV Oficial: ${tasa.toFixed(2)} Bs\n`;
     totalsSection += `🇻🇪 *TOTAL A PAGAR: ${totalBsFormatted} Bs*`;
 
     const fullReport = 
@@ -308,7 +308,7 @@ ${totalsSection}`;
                   <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
                     <span>Tasa Oficial BCV:</span>
                     <span className="font-mono font-bold text-amber-400">
-                      {tasa.toFixed(2)} Bs {bcvRate?.es_fin_de_semana ? '(Próx. Día Hábil)' : ''}
+                      {tasa.toFixed(2)} Bs
                     </span>
                   </div>
                   <div className="my-1.5 border-t border-slate-800" />

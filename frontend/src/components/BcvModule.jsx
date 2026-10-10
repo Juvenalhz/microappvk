@@ -144,16 +144,6 @@ export default function BcvModule({ bcvRate, onSaveManualBcv }) {
                 <span className="font-mono bg-brand-gold/10 text-brand-gold px-2.5 py-0.5 rounded-full font-bold text-xs">
                   1 USD = {tasa.toFixed(2)} Bs
                 </span>
-                {bcvRate?.fecha_valor && (
-                  <span className="text-[10px] text-amber-300 font-semibold mt-1 flex items-center space-x-1">
-                    <span>🗓️ {bcvRate.fecha_valor}</span>
-                    {bcvRate?.es_fin_de_semana && (
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-extrabold border border-amber-500/30">
-                        Próx. Día Hábil
-                      </span>
-                    )}
-                  </span>
-                )}
               </div>
             </div>
 

@@ -69,17 +69,7 @@ export default function Sidebar({
 
           <div className="text-lg font-black text-amber-400 font-mono flex items-baseline justify-between">
             <span>{tasa.toFixed(2)} <span className="text-xs text-slate-300">Bs/$</span></span>
-            {bcvRate?.es_fin_de_semana && (
-              <span className="text-[9px] font-extrabold bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-500/30">
-                Próx. Día Hábil
-              </span>
-            )}
           </div>
-          {bcvRate?.fecha_valor && (
-            <div className="text-[10px] text-slate-400 font-medium truncate pt-0.5">
-              🗓️ {bcvRate.fecha_valor}
-            </div>
-          )}
         </div>
 
         {/* Navigation Items */}
