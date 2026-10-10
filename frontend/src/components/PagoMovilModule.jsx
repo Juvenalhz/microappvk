@@ -16,10 +16,8 @@ import {
   DollarSign,
   Upload,
   Image as ImageIcon,
-  Trash2,
-  Sparkles
+  Trash2
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 
 // Helper para comprimir y convertir imágenes a Base64 liviano
 function processImageFile(file, callback) {
@@ -51,7 +49,7 @@ function processImageFile(file, callback) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Calidad 0.85 en WebP / JPEG
+      // Calidad 0.85 en JPEG
       const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       callback(dataUrl);
     };
@@ -241,7 +239,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
           </div>
           <div>
             <h2 className="text-sm sm:text-base font-extrabold text-white leading-tight">Pago Móvil en Caja</h2>
-            <p className="text-[11px] sm:text-xs text-slate-400">Códigos QR e Imagen de Afiche Oficial</p>
+            <p className="text-[11px] sm:text-xs text-slate-400">Imágenes de QR Oficiales de Banco</p>
           </div>
         </div>
 
@@ -259,7 +257,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             onClick={() => openQrForAccount(bankAccounts[0])}
             className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center space-x-1.5 transition-all shadow-md active:scale-95"
           >
-            <QrCode className="w-4 h-4" />
+            <ImageIcon className="w-4 h-4" />
             <span>Ver QR</span>
           </button>
         </div>
@@ -350,7 +348,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                     className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/40 transition-all active:scale-95"
                     title="Ver QR de esta cuenta"
                   >
-                    <QrCode className="w-4 h-4" />
+                    <ImageIcon className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -369,16 +367,16 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                     />
                     <div className="flex-1 min-w-0">
                       <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mb-0.5 border border-emerald-500/20">
-                        ✓ QR Oficial Cargado
+                        ✓ Foto QR Cargada
                       </span>
-                      <p className="text-[11px] text-slate-300 font-medium truncate">Toca para ampliar y mostrar al cliente</p>
+                      <p className="text-[11px] text-slate-300 font-medium truncate">Toca para ampliar imagen en pantalla</p>
                     </div>
                     <Maximize2 className="w-4 h-4 text-slate-400 group-hover:text-amber-400 shrink-0" />
                   </div>
                 ) : (
                   <label className="bg-slate-950/40 hover:bg-slate-900 border border-dashed border-slate-700 hover:border-amber-500/50 p-2.5 rounded-xl flex items-center justify-center space-x-2 cursor-pointer transition-all text-xs text-slate-400 hover:text-amber-300">
                     <Upload className="w-4 h-4 text-amber-400" />
-                    <span className="font-bold text-[11px]">Subir foto / captura del QR oficial</span>
+                    <span className="font-bold text-[11px]">Subir foto / captura de tu QR</span>
                     <input 
                       type="file" 
                       accept="image/*" 
@@ -449,14 +447,14 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                 className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500 hover:text-slate-950 transition-all flex items-center space-x-1"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
-                <span>Ampliar QR</span>
+                <span>Ver QR</span>
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* 4. MODAL PANTALLA COMPLETA: VISUALIZADOR DEL QR */}
+      {/* 4. MODAL PANTALLA COMPLETA: VISUALIZADOR DE LA FOTO DEL QR */}
       {isQrModalOpen && activeAccount && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 animate-fade-in overflow-y-auto">
           
@@ -479,42 +477,50 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             </div>
 
             {/* Display Monto a Cobrar en Bs */}
-            <div className="bg-slate-900 text-white rounded-2xl p-3 border border-slate-800 shadow-inner">
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total a Cobrar:</div>
-              <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
-                {montoBs ? parseFloat(montoBs).toLocaleString('es-VE', { minimumFractionDigits: 2 }) : '0.00'} <span className="text-xs font-bold text-slate-300">Bs</span>
-              </div>
-              {montoUsd && (
-                <div className="text-[11px] text-emerald-400 font-mono font-bold mt-0.5">
-                  ≈ ${parseFloat(montoUsd).toFixed(2)} USD
+            {montoBs ? (
+              <div className="bg-slate-900 text-white rounded-2xl p-3 border border-slate-800 shadow-inner">
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Monto a Cobrar en Caja:</div>
+                <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
+                  {parseFloat(montoBs).toLocaleString('es-VE', { minimumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-300">Bs</span>
                 </div>
-              )}
-            </div>
+                {montoUsd && (
+                  <div className="text-[11px] text-emerald-400 font-mono font-bold mt-0.5">
+                    ≈ ${parseFloat(montoUsd).toFixed(2)} USD
+                  </div>
+                )}
+              </div>
+            ) : null}
 
-            {/* Visualizador Principal del QR (Imagen o Generado) */}
-            <div className="mx-auto bg-white p-3 rounded-2xl border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner relative min-h-[240px]">
+            {/* Visualizador Principal de la Foto del QR */}
+            <div className="mx-auto bg-white p-3 rounded-2xl border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner relative min-h-[220px]">
               {activeAccount.qrImage ? (
                 <div className="space-y-2">
                   <img 
                     src={activeAccount.qrImage} 
                     alt="QR Oficial" 
-                    className="max-h-72 w-auto object-contain rounded-xl shadow"
+                    className="max-h-80 w-auto object-contain rounded-xl shadow-md"
                   />
-                  <div className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-block">
-                    ✓ Imagen de Afiche Oficial BDV / Banco
-                  </div>
                 </div>
               ) : (
-                <div className="space-y-3 py-2">
-                  <QRCodeSVG 
-                    value={`PAGO MOVIL\nBanco: ${activeAccount.banco}\nCI/RIF: ${activeAccount.rif}\nTeléfono: ${activeAccount.telefonoFormateado || activeAccount.telefono}${montoBs ? `\nMonto: ${montoBs} Bs` : ''}`} 
-                    size={200}
-                    level="M"
-                    includeMargin={true}
-                  />
-                  <p className="text-[10px] text-slate-500 max-w-[200px] mx-auto font-medium leading-tight">
-                    ¿Tienes la imagen oficial de tu QR? Puedes cargarla abajo para sustituir este gráfico.
+                <div className="space-y-3 py-6 px-2 text-center">
+                  <ImageIcon className="w-12 h-12 text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-600 font-bold">
+                    No has subido la foto del QR de esta cuenta todavía.
                   </p>
+                  <label className="py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs transition-all inline-flex items-center space-x-1.5 cursor-pointer shadow">
+                    <Upload className="w-4 h-4" />
+                    <span>Seleccionar foto / captura</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleFileUploadForAccount(e.target.files[0], activeAccount.id);
+                        }
+                      }}
+                    />
+                  </label>
                 </div>
               )}
             </div>
@@ -531,7 +537,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             <div className="space-y-2 pt-1">
               <label className="w-full py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs border border-blue-200 transition-all flex items-center justify-center space-x-1.5 cursor-pointer">
                 <Upload className="w-3.5 h-3.5" />
-                <span>{activeAccount.qrImage ? 'Cambiar Foto del QR' : 'Subir Imagen Oficial del QR'}</span>
+                <span>{activeAccount.qrImage ? 'Cambiar Foto del QR' : 'Subir Foto del QR'}</span>
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -579,7 +585,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <h3 className="font-extrabold text-sm flex items-center space-x-1.5">
                 <Edit3 className="w-4 h-4 text-amber-400" />
-                <span>Configurar Cuenta & QR</span>
+                <span>Configurar Cuenta & Foto QR</span>
               </h3>
               <button
                 onClick={() => setIsEditAccountModalOpen(false)}
@@ -593,7 +599,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
               
               {/* Carga de Imagen en la edición */}
               <div>
-                <label className="text-amber-300 font-bold block mb-1">Imagen del QR Oficial (BDVenlínea / Banco):</label>
+                <label className="text-amber-300 font-bold block mb-1">Foto / Captura del QR Oficial del Banco:</label>
                 {editingAccount.qrImage ? (
                   <div className="bg-slate-900 p-2 rounded-xl border border-slate-700 flex items-center space-x-3">
                     <img 
