@@ -3,7 +3,6 @@ import {
   CreditCard, 
   Copy, 
   Check, 
-  QrCode, 
   Maximize2, 
   X, 
   Phone, 
@@ -12,8 +11,6 @@ import {
   Building2, 
   Plus, 
   Edit3, 
-  Calculator, 
-  DollarSign,
   Upload,
   Image as ImageIcon,
   Trash2
@@ -58,19 +55,12 @@ function processImageFile(file, callback) {
   reader.readAsDataURL(file);
 }
 
-export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
+export default function PagoMovilModule({ bcvRate }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isEditAccountModalOpen, setIsEditAccountModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
-
-  // Campos de Monto a cobrar
-  const [montoUsd, setMontoUsd] = useState(initialAmountUsd || '');
-  const [montoBs, setMontoBs] = useState('');
-
-  const rawTasa = bcvRate ? Number(bcvRate.tasa) : 876.79;
-  const tasa = Math.floor(rawTasa * 100) / 100;
 
   // Cuentas de Pago Móvil guardadas en localStorage
   const [bankAccounts, setBankAccounts] = useState(() => {
@@ -123,32 +113,8 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
     }
   };
 
-  // Cálculo automático entre USD y Bs
-  const handleUsdChange = (val) => {
-    setMontoUsd(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && num > 0) {
-      const calculatedBs = (num * tasa).toFixed(2);
-      setMontoBs(calculatedBs);
-    } else {
-      setMontoBs('');
-    }
-  };
-
-  const handleBsChange = (val) => {
-    setMontoBs(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && num > 0 && tasa > 0) {
-      const calculatedUsd = (num / tasa).toFixed(2);
-      setMontoUsd(calculatedUsd);
-    } else {
-      setMontoUsd('');
-    }
-  };
-
   const handleCopyAccount = (acc, index) => {
-    const bsText = montoBs ? `\nMonto a pagar: ${montoBs} Bs.` : '';
-    const textToCopy = `PAGO MÓVIL:\nBanco: ${acc.banco}\nCédula/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}\nTitular: ${acc.titular}${bsText}`;
+    const textToCopy = `PAGO MÓVIL:\nBanco: ${acc.banco}\nCédula/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}\nTitular: ${acc.titular}`;
     navigator.clipboard.writeText(textToCopy);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
@@ -238,81 +204,21 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
             <CreditCard className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm sm:text-base font-extrabold text-white leading-tight">Pago Móvil en Caja</h2>
-            <p className="text-[11px] sm:text-xs text-slate-400">Imágenes de QR Oficiales de Banco</p>
+            <h2 className="text-sm sm:text-base font-extrabold text-white leading-tight">Cuentas Pago Móvil</h2>
+            <p className="text-[11px] sm:text-xs text-slate-400">Afiches y Fotos de QR Oficiales de Banco</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => openEditModal(null)}
-            className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 transition-all text-xs font-bold flex items-center space-x-1"
-            title="Agregar nueva cuenta bancaria"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            <span className="hidden sm:inline">Nueva Cuenta</span>
-          </button>
-
-          <button
-            onClick={() => openQrForAccount(bankAccounts[0])}
-            className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center space-x-1.5 transition-all shadow-md active:scale-95"
-          >
-            <ImageIcon className="w-4 h-4" />
-            <span>Ver QR</span>
-          </button>
-        </div>
+        <button
+          onClick={() => openEditModal(null)}
+          className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black flex items-center space-x-1.5 transition-all shadow-md active:scale-95"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Nueva Cuenta</span>
+        </button>
       </div>
 
-      {/* 2. Calculadora de Cobro USD ↔ Bs */}
-      <div className="bg-gradient-to-r from-slate-900 via-surface-card to-[#111827] border border-amber-500/30 rounded-2xl p-3.5 sm:p-4 shadow-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center space-x-1.5">
-            <Calculator className="w-4 h-4 text-amber-400" />
-            <span>Calculadora de Cobro en Caja</span>
-          </span>
-          <span className="text-[10px] font-mono text-slate-400">
-            Tasa BCV: <strong className="text-amber-400">{tasa.toFixed(2)} Bs</strong>
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Input USD */}
-          <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
-            <label className="text-[10px] text-slate-400 font-bold block uppercase mb-1">Monto en USD ($)</label>
-            <div className="flex items-center space-x-1">
-              <DollarSign className="w-4 h-4 text-emerald-400 shrink-0" />
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={montoUsd}
-                onChange={(e) => handleUsdChange(e.target.value)}
-                className="w-full bg-transparent text-white font-mono font-black text-base focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Input Bs */}
-          <div className="bg-slate-950/80 p-2.5 rounded-xl border border-amber-500/40">
-            <label className="text-[10px] text-amber-300 font-bold block uppercase mb-1">Monto a Cobrar (Bs)</label>
-            <div className="flex items-center space-x-1">
-              <span className="text-amber-400 font-bold text-xs">Bs.</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={montoBs}
-                onChange={(e) => handleBsChange(e.target.value)}
-                className="w-full bg-transparent text-amber-400 font-mono font-black text-base focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Tarjetas de Cuentas Bancarias */}
+      {/* 2. Tarjetas de Cuentas Bancarias */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {bankAccounts.map((acc, index) => (
           <div 
@@ -346,7 +252,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                   <button
                     onClick={() => openQrForAccount(acc)}
                     className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/40 transition-all active:scale-95"
-                    title="Ver QR de esta cuenta"
+                    title="Ver Foto del QR de esta cuenta"
                   >
                     <ImageIcon className="w-4 h-4" />
                   </button>
@@ -369,14 +275,14 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                       <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mb-0.5 border border-emerald-500/20">
                         ✓ Foto QR Cargada
                       </span>
-                      <p className="text-[11px] text-slate-300 font-medium truncate">Toca para ampliar imagen en pantalla</p>
+                      <p className="text-[11px] text-slate-300 font-medium truncate">Toca para ampliar foto en pantalla</p>
                     </div>
                     <Maximize2 className="w-4 h-4 text-slate-400 group-hover:text-amber-400 shrink-0" />
                   </div>
                 ) : (
                   <label className="bg-slate-950/40 hover:bg-slate-900 border border-dashed border-slate-700 hover:border-amber-500/50 p-2.5 rounded-xl flex items-center justify-center space-x-2 cursor-pointer transition-all text-xs text-slate-400 hover:text-amber-300">
                     <Upload className="w-4 h-4 text-amber-400" />
-                    <span className="font-bold text-[11px]">Subir foto / captura de tu QR</span>
+                    <span className="font-bold text-[11px]">Subir foto del QR oficial del banco</span>
                     <input 
                       type="file" 
                       accept="image/*" 
@@ -447,14 +353,14 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                 className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500 hover:text-slate-950 transition-all flex items-center space-x-1"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
-                <span>Ver QR</span>
+                <span>Ampliar Foto</span>
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* 4. MODAL PANTALLA COMPLETA: VISUALIZADOR DE LA FOTO DEL QR */}
+      {/* 3. MODAL PANTALLA COMPLETA: VISUALIZADOR DE LA FOTO DEL AFICHE QR */}
       {isQrModalOpen && activeAccount && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 animate-fade-in overflow-y-auto">
           
@@ -472,24 +378,9 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
               <span className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-block">
                 {activeAccount.banco}
               </span>
-              <h3 className="font-black text-slate-900 text-lg sm:text-xl leading-tight">PAGO MÓVIL</h3>
-              <p className="text-xs text-slate-500 font-medium">Escanea la imagen con la app de tu banco</p>
+              <h3 className="font-black text-slate-900 text-lg sm:text-xl leading-tight">AFICHE DE PAGO MÓVIL</h3>
+              <p className="text-xs text-slate-500 font-medium">Muestra esta imagen al cliente para escanear</p>
             </div>
-
-            {/* Display Monto a Cobrar en Bs */}
-            {montoBs ? (
-              <div className="bg-slate-900 text-white rounded-2xl p-3 border border-slate-800 shadow-inner">
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Monto a Cobrar en Caja:</div>
-                <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
-                  {parseFloat(montoBs).toLocaleString('es-VE', { minimumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-300">Bs</span>
-                </div>
-                {montoUsd && (
-                  <div className="text-[11px] text-emerald-400 font-mono font-bold mt-0.5">
-                    ≈ ${parseFloat(montoUsd).toFixed(2)} USD
-                  </div>
-                )}
-              </div>
-            ) : null}
 
             {/* Visualizador Principal de la Foto del QR */}
             <div className="mx-auto bg-white p-3 rounded-2xl border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner relative min-h-[220px]">
@@ -497,7 +388,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                 <div className="space-y-2">
                   <img 
                     src={activeAccount.qrImage} 
-                    alt="QR Oficial" 
+                    alt="AFICHE QR Oficial" 
                     className="max-h-80 w-auto object-contain rounded-xl shadow-md"
                   />
                 </div>
@@ -553,7 +444,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => {
-                    const text = `PAGO MÓVIL:\nBanco: ${activeAccount.banco}\nCI/RIF: ${activeAccount.rif}\nTeléfono: ${activeAccount.telefonoFormateado || activeAccount.telefono}${montoBs ? `\nMonto: ${montoBs} Bs.` : ''}`;
+                    const text = `PAGO MÓVIL:\nBanco: ${activeAccount.banco}\nCI/RIF: ${activeAccount.rif}\nTeléfono: ${activeAccount.telefonoFormateado || activeAccount.telefono}`;
                     navigator.clipboard.writeText(text);
                     alert('¡Datos copiados al portapapeles!');
                   }}
@@ -577,7 +468,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
         </div>
       )}
 
-      {/* 5. MODAL EDICIÓN DE CUENTA BANCARIA E IMAGEN QR */}
+      {/* 4. MODAL EDICIÓN DE CUENTA BANCARIA E IMAGEN QR */}
       {isEditAccountModalOpen && editingAccount && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-[#0f172a] border border-slate-700 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-scale-in text-white max-h-[90vh] overflow-y-auto no-scrollbar">
