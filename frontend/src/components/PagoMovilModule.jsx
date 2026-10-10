@@ -270,9 +270,12 @@ export default function PagoMovilModule({ bcvRate }) {
             <div>
               <div className="flex items-start justify-between mb-2.5">
                 <div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 border border-slate-700">
-                    {acc.badge}
-                  </span>
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25 flex items-center space-x-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      <span>{acc.badge && acc.badge.trim() ? acc.badge : (index === 0 ? 'Cuenta Principal' : `Cuenta ${index + 1}`)}</span>
+                    </span>
+                  </div>
                   <h3 className="text-sm sm:text-base font-black text-white mt-1 flex items-center space-x-1.5">
                     <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>{acc.banco}</span>
