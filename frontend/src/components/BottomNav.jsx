@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Calculator, TrendingDown, CreditCard } from 'lucide-react';
+import { Search, Calculator, TrendingDown, CreditCard, BarChart3 } from 'lucide-react';
 
 export default function BottomNav({ activeTab, setActiveTab }) {
   const navItems = [
@@ -8,6 +8,12 @@ export default function BottomNav({ activeTab, setActiveTab }) {
       label: 'Stock',
       icon: Search,
       badge: null
+    },
+    {
+      id: 'kpi',
+      label: 'KPIs',
+      icon: BarChart3,
+      badge: 'PRO'
     },
     {
       id: 'bcv',
@@ -30,7 +36,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 w-full z-50 bg-[#0d1624] border-t border-slate-800/80 pt-2 pb-[env(safe-area-inset-bottom,16px)] shadow-2xl">
+    <nav className="fixed bottom-0 inset-x-0 w-full z-50 bg-[#0d1624] border-t border-slate-800/80 pt-2 pb-[env(safe-area-inset-bottom,16px)] shadow-2xl md:hidden">
       <div className="max-w-md mx-auto flex items-center justify-around px-3">
         {navItems.map((item) => {
           const Icon = item.icon;

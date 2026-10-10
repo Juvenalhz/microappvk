@@ -10,10 +10,10 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-export default function BinanceBrechaModule({ bcvRate, onRefreshRates }) {
+export default function BinanceBrechaModule({ bcvRate, onRefreshRates, onSaveManualBcv }) {
   // Tasas oficiales y de mercado auto-cargadas desde el BFF / API
-  const defaultBcv = bcvRate?.tasa ? Number(bcvRate.tasa).toFixed(2) : '873.87';
-  const defaultBinance = bcvRate?.binance ? Number(bcvRate.binance).toFixed(2) : '1007.74';
+  const defaultBcv = bcvRate?.tasa ? (Math.floor(Number(bcvRate.tasa) * 100) / 100).toFixed(2) : '876.79';
+  const defaultBinance = bcvRate?.binance ? (Math.floor(Number(bcvRate.binance) * 100) / 100).toFixed(2) : '1010.29';
 
   // Monto en Bs inicia VACÍO
   const [montoBs, setMontoBs] = useState('');
@@ -28,10 +28,10 @@ export default function BinanceBrechaModule({ bcvRate, onRefreshRates }) {
   // Auto-actualizar tasas cuando bcvRate cambie
   useEffect(() => {
     if (bcvRate?.tasa) {
-      setTasaBcv(Number(bcvRate.tasa).toFixed(2));
+      setTasaBcv((Math.floor(Number(bcvRate.tasa) * 100) / 100).toFixed(2));
     }
     if (bcvRate?.binance) {
-      setTasaBinance(Number(bcvRate.binance).toFixed(2));
+      setTasaBinance((Math.floor(Number(bcvRate.binance) * 100) / 100).toFixed(2));
     }
   }, [bcvRate]);
 
@@ -153,14 +153,27 @@ ${bsNum > 0 ? `----------------------------------
           </div>
           <div>
             <h2 className="text-xs sm:text-sm font-black text-white leading-tight">Brecha Cambiaria BCV vs Binance</h2>
-            <p className="text-[10px] sm:text-xs text-slate-400">Consulta en vivo (BCV & Binance P2P)</p>
+            <p className="text-[10px] sm:text-xs text-slate-400 flex items-center space-x-1.5 flex-wrap">
+              <span>Consulta en vivo (BCV & Binance P2P)</span>
+              {bcvRate?.fecha_valor && (
+                <span className="text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">
+                  🗓️ {bcvRate.fecha_valor} {bcvRate?.es_fin_de_semana ? '(Próx. Día Hábil)' : ''}
+                </span>
+              )}
+            </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-1.5">
           <button
-            onClick={handleRefreshClick}
-            title="Refrescar tasas en vivo"
+            onClick={async () => {
+              if (onRefreshRates) {
+                setIsRefreshing(true);
+                await onRefreshRates(true);
+                setTimeout(() => setIsRefreshing(false), 600);
+              }
+            }}
+            title="Refrescar tasas en vivo del próximo día hábil"
             className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-amber-400 border border-slate-700 active:scale-95 transition-all"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
@@ -348,13 +361,27 @@ ${bsNum > 0 ? `----------------------------------
             })}
           </div>
 
-          {/* Botón Borrar Todo */}
-          <button
-            onClick={() => handleKeyPress('CLEAR')}
-            className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-[11px] sm:text-xs font-semibold hover:text-white transition-all"
-          >
-            Limpiar {activeInput === 'bs' ? 'Monto Bs' : activeInput === 'binance' ? 'Tasa Binance' : 'Tasa BCV'}
-          </button>
+          {/* Botón Borrar Todo & Guardar Manual */}
+          <div className="space-y-1.5">
+            {onSaveManualBcv && (activeInput === 'bcv' || activeInput === 'binance') && (
+              <button
+                onClick={async () => {
+                  const ok = await onSaveManualBcv(tasaBcv, tasaBinance, 'Ingreso Manual');
+                  if (ok) alert('¡Tasa manual guardada exitosamente en el servidor!');
+                }}
+                className="w-full py-2 sm:py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow active:scale-95 flex items-center justify-center space-x-1.5"
+              >
+                <span>💾 Guardar Tasa en Sistema</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => handleKeyPress('CLEAR')}
+              className="w-full py-2 sm:py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-[11px] sm:text-xs font-semibold hover:text-white transition-all"
+            >
+              Limpiar {activeInput === 'bs' ? 'Monto Bs' : activeInput === 'binance' ? 'Tasa Binance' : 'Tasa BCV'}
+            </button>
+          </div>
         </div>
 
       </div>

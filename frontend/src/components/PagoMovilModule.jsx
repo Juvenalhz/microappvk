@@ -1,33 +1,118 @@
-import React, { useState } from 'react';
-import { CreditCard, Copy, Check, QrCode, Maximize2, X, Phone, User, Hash, Building2, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  CreditCard, 
+  Copy, 
+  Check, 
+  QrCode, 
+  Maximize2, 
+  X, 
+  Phone, 
+  User, 
+  Hash, 
+  Building2, 
+  Plus, 
+  Edit3, 
+  Share2, 
+  Calculator, 
+  DollarSign,
+  AlertCircle
+} from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
-export default function PagoMovilModule() {
+export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isEditAccountModalOpen, setIsEditAccountModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [qrFormatMode, setQrFormatMode] = useState('standard'); // 'standard' | 'readable'
 
-  // Cuentas de Pago Móvil precacheadas (Modo Offline Directo)
-  const [bankAccounts] = useState([
-    {
-      id: 1,
-      banco: "0102 - Banco de Venezuela",
-      codigoBanco: "0102",
-      rif: "V-23654575",
-      cedulaNumero: "23654575",
-      telefono: "04241346969",
-      telefonoFormateado: "0424-1346969",
-      titular: "Prueba Banco de Venezuela",
-      color: "from-blue-600 to-indigo-700",
-      badge: "Principal (BDV)"
+  // Formato del QR Interbancario: 'suiche7b' (JSON) | 'c2p_pipe' (Pipe BDV) | 'uri' (pagomovil://) | 'readable' (Texto)
+  const [qrFormatMode, setQrFormatMode] = useState('suiche7b'); 
+
+  // Campos de Monto a cobrar
+  const [montoUsd, setMontoUsd] = useState(initialAmountUsd || '');
+  const [montoBs, setMontoBs] = useState('');
+
+  const rawTasa = bcvRate ? Number(bcvRate.tasa) : 876.79;
+  const tasa = Math.floor(rawTasa * 100) / 100;
+
+  // Cuentas de Pago Móvil precacheadas y editables por la tienda
+  const [bankAccounts, setBankAccounts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vk_pago_movil_accounts');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('[PagoMovil] Error al leer cuentas guardadas:', e);
     }
-  ]);
+    return [
+      {
+        id: 1,
+        banco: "0102 - Banco de Venezuela",
+        codigoBanco: "0102",
+        rif: "V-23654575",
+        cedulaNumero: "23654575",
+        telefono: "04241346969",
+        telefonoFormateado: "0424-1346969",
+        titular: "VK MEN Tienda",
+        color: "from-blue-600 to-indigo-700",
+        badge: "Principal (BDV)"
+      },
+      {
+        id: 2,
+        banco: "0134 - Banesco",
+        codigoBanco: "0134",
+        rif: "J-500123456",
+        cedulaNumero: "500123456",
+        telefono: "04129876543",
+        telefonoFormateado: "0412-9876543",
+        titular: "VK MEN C.A.",
+        color: "from-emerald-600 to-teal-700",
+        badge: "Secundaria (Banesco)"
+      }
+    ];
+  });
 
   const activeAccount = selectedAccount || bankAccounts[0];
 
+  // Persistir cuentas bancarias
+  const saveAccounts = (newAccounts) => {
+    setBankAccounts(newAccounts);
+    try {
+      localStorage.setItem('vk_pago_movil_accounts', JSON.stringify(newAccounts));
+    } catch (e) {
+      console.warn('[PagoMovil] Error al guardar cuentas:', e);
+    }
+  };
+
+  // Cálculo automático entre USD y Bs
+  const handleUsdChange = (val) => {
+    setMontoUsd(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0) {
+      const calculatedBs = (num * tasa).toFixed(2);
+      setMontoBs(calculatedBs);
+    } else {
+      setMontoBs('');
+    }
+  };
+
+  const handleBsChange = (val) => {
+    setMontoBs(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && num > 0 && tasa > 0) {
+      const calculatedUsd = (num / tasa).toFixed(2);
+      setMontoUsd(calculatedUsd);
+    } else {
+      setMontoUsd('');
+    }
+  };
+
   const handleCopyAccount = (acc, index) => {
-    const textToCopy = `PAGO MÓVIL BDV:\nBanco: ${acc.banco}\nCédula/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}\nTitular: ${acc.titular}`;
+    const bsText = montoBs ? `\nMonto a pagar: ${montoBs} Bs.` : '';
+    const textToCopy = `PAGO MÓVIL:\nBanco: ${acc.banco}\nCédula/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}\nTitular: ${acc.titular}${bsText}`;
     navigator.clipboard.writeText(textToCopy);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
@@ -38,211 +123,523 @@ export default function PagoMovilModule() {
     setIsQrModalOpen(true);
   };
 
-  // Genera el payload string que leerá el escáner del banco
-  // 1. Estándar bancario compacto (Formato 0102|V23654575|04241346969)
-  // 2. Texto multilínea legible
+  const openEditModal = (acc = null) => {
+    if (acc) {
+      setEditingAccount({ ...acc });
+    } else {
+      setEditingAccount({
+        id: Date.now(),
+        banco: "0102 - Banco de Venezuela",
+        codigoBanco: "0102",
+        rif: "V-00000000",
+        cedulaNumero: "00000000",
+        telefono: "04140000000",
+        telefonoFormateado: "0414-0000000",
+        titular: "Nombre del Titular",
+        color: "from-blue-600 to-indigo-700",
+        badge: "Cuenta Adicional"
+      });
+    }
+    setIsEditAccountModalOpen(true);
+  };
+
+  const handleSaveAccountForm = (e) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+
+    const exists = bankAccounts.some(a => a.id === editingAccount.id);
+    let updated = [];
+    if (exists) {
+      updated = bankAccounts.map(a => a.id === editingAccount.id ? editingAccount : a);
+    } else {
+      updated = [...bankAccounts, editingAccount];
+    }
+
+    saveAccounts(updated);
+    if (selectedAccount && selectedAccount.id === editingAccount.id) {
+      setSelectedAccount(editingAccount);
+    }
+    setIsEditAccountModalOpen(false);
+  };
+
+  const handleDeleteAccount = (id) => {
+    if (bankAccounts.length <= 1) {
+      alert('Debe haber al menos una cuenta registrada.');
+      return;
+    }
+    if (confirm('¿Deseas eliminar esta cuenta de Pago Móvil?')) {
+      const updated = bankAccounts.filter(a => a.id !== id);
+      saveAccounts(updated);
+      if (selectedAccount && selectedAccount.id === id) {
+        setSelectedAccount(updated[0]);
+      }
+    }
+  };
+
+  // Genera el payload QR según el estándar bancario de Venezuela
+  // 1. suiche7b (JSON Suiche 7B / C2P Interbancario): {"banco":"0102","doc":"V23654575","telefono":"04241346969","monto":"150.00"}
+  // 2. c2p_pipe (BDV / Banesco Pipe): 0102|V23654575|04241346969|150.00
+  // 3. uri (Pago Móvil URI): pagomovil://0102?doc=V23654575&phone=04241346969&amount=150.00
+  // 4. readable (Texto Plano)
   const getQrPayload = (acc) => {
     if (!acc) return '';
     const cleanPhone = acc.telefono.replace(/[^0-9]/g, '');
     const cleanDoc = acc.rif.replace(/[^0-9VJEGvjeg]/g, '').toUpperCase();
     const bankCode = acc.codigoBanco || '0102';
+    const amountVal = parseFloat(montoBs);
+    const amountFormatted = !isNaN(amountVal) && amountVal > 0 ? amountVal.toFixed(2) : '0.00';
 
-    if (qrFormatMode === 'standard') {
-      // Estándar usual de escaneo rápido BDV / Pago Móvil
-      return `${bankCode}|${cleanDoc}|${cleanPhone}`;
+    if (qrFormatMode === 'suiche7b') {
+      // Estándar oficial JSON Suiche 7B / Interbancario
+      return JSON.stringify({
+        banco: bankCode,
+        doc: cleanDoc,
+        telefono: cleanPhone,
+        monto: amountFormatted
+      });
+    } else if (qrFormatMode === 'c2p_pipe') {
+      // Estándar C2P Pipe BDV / Banesco
+      return `${bankCode}|${cleanDoc}|${cleanPhone}|${amountFormatted}`;
+    } else if (qrFormatMode === 'uri') {
+      // Estándar URI
+      return `pagomovil://${bankCode}?doc=${cleanDoc}&phone=${cleanPhone}&amount=${amountFormatted}`;
     } else {
-      // Formato texto legible para cualquier cámara
-      return `PAGO MOVIL\nBanco: ${acc.banco}\nCI/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}`;
+      // Texto Plano Legible
+      return `PAGO MOVIL\nBanco: ${acc.banco}\nCI/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}${amountVal > 0 ? `\nMonto: ${amountFormatted} Bs` : ''}`;
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 max-w-lg mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,16px))]">
+    <div className="flex-1 flex flex-col p-3 sm:p-5 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,16px))]">
       
-      {/* Encabezado Módulo */}
-      <div className="flex items-center justify-between px-1">
-        <div>
-          <h2 className="text-base font-bold text-white flex items-center space-x-1.5">
-            <CreditCard className="w-5 h-5 text-brand-500" />
-            <span>Pago Móvil en Caja</span>
-          </h2>
-          <p className="text-xs text-slate-400">Datos bancarios y QR dinámico escaneable</p>
+      {/* 1. Encabezado de Módulo */}
+      <div className="flex items-center justify-between bg-surface-card border border-surface-cardBorder rounded-2xl p-3.5 shadow-md">
+        <div className="flex items-center space-x-2.5">
+          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+            <CreditCard className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-sm sm:text-base font-extrabold text-white leading-tight">Pago Móvil en Caja</h2>
+            <p className="text-[11px] sm:text-xs text-slate-400">QR Interbancario Suiche 7B & BDV C2P</p>
+          </div>
         </div>
-        
-        <button
-          onClick={() => openQrForAccount(bankAccounts[0])}
-          className="px-3 py-1.5 rounded-xl bg-brand-500/20 border border-brand-500/30 text-brand-500 text-xs font-bold flex items-center space-x-1 hover:bg-brand-500 hover:text-white transition-all shadow-md active:scale-95"
-        >
-          <QrCode className="w-4 h-4" />
-          <span>Ver QR</span>
-        </button>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => openEditModal(null)}
+            className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 active:scale-95 transition-all text-xs font-bold flex items-center space-x-1"
+            title="Agregar nueva cuenta bancaria"
+          >
+            <Plus className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline">Nueva Cuenta</span>
+          </button>
+
+          <button
+            onClick={() => openQrForAccount(bankAccounts[0])}
+            className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center space-x-1.5 transition-all shadow-md active:scale-95"
+          >
+            <QrCode className="w-4 h-4" />
+            <span>Generar QR</span>
+          </button>
+        </div>
       </div>
 
-      {/* Tarjetas Bancarias */}
-      <div className="space-y-3.5">
+      {/* 2. Calculadora / Input de Monto a Cobrar */}
+      <div className="bg-gradient-to-r from-slate-900 via-surface-card to-[#111827] border border-amber-500/30 rounded-2xl p-3.5 sm:p-4 shadow-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center space-x-1.5">
+            <Calculator className="w-4 h-4 text-amber-400" />
+            <span>Total a Cobrar (Genera QR con Monto)</span>
+          </span>
+          <span className="text-[10px] font-mono text-slate-400">
+            Tasa BCV: <strong className="text-amber-400">{tasa.toFixed(2)} Bs</strong>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Input USD */}
+          <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+            <label className="text-[10px] text-slate-400 font-bold block uppercase mb-1">Monto en USD ($)</label>
+            <div className="flex items-center space-x-1">
+              <DollarSign className="w-4 h-4 text-emerald-400 shrink-0" />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={montoUsd}
+                onChange={(e) => handleUsdChange(e.target.value)}
+                className="w-full bg-transparent text-white font-mono font-black text-base focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Input Bs (Auto-Calculado) */}
+          <div className="bg-slate-950/80 p-2.5 rounded-xl border border-amber-500/40">
+            <label className="text-[10px] text-amber-300 font-bold block uppercase mb-1">Monto en Bs (Total QR)</label>
+            <div className="flex items-center space-x-1">
+              <span className="text-amber-400 font-bold text-xs">Bs.</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={montoBs}
+                onChange={(e) => handleBsChange(e.target.value)}
+                className="w-full bg-transparent text-amber-400 font-mono font-black text-base focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Tarjetas Bancarias */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {bankAccounts.map((acc, index) => (
           <div 
             key={acc.id}
-            className="bg-surface-card border border-surface-cardBorder rounded-2xl p-4 shadow-xl shadow-black/25 relative overflow-hidden group"
+            className="bg-surface-card border border-surface-cardBorder rounded-2xl p-4 shadow-xl shadow-black/25 relative overflow-hidden flex flex-col justify-between space-y-3"
           >
-            {/* Gradiente sutil decorativo */}
-            <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${acc.color} opacity-15 rounded-bl-full pointer-events-none`} />
+            {/* Gradiente decorativo */}
+            <div className={`absolute top-0 right-0 w-28 h-28 bg-gradient-to-br ${acc.color || 'from-amber-500 to-amber-700'} opacity-15 rounded-bl-full pointer-events-none`} />
 
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                  {acc.badge}
-                </span>
-                <h3 className="text-sm font-extrabold text-white mt-1 flex items-center space-x-1">
-                  <Building2 className="w-4 h-4 text-brand-500" />
-                  <span>{acc.banco}</span>
-                </h3>
+            <div>
+              <div className="flex items-start justify-between mb-2.5">
+                <div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 border border-slate-700">
+                    {acc.badge}
+                  </span>
+                  <h3 className="text-sm sm:text-base font-black text-white mt-1 flex items-center space-x-1.5">
+                    <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{acc.banco}</span>
+                  </h3>
+                </div>
+
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => openEditModal(acc)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
+                    title="Editar datos de esta cuenta"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => openQrForAccount(acc)}
+                    className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/40 transition-all active:scale-95"
+                    title="Generar QR Escaneable"
+                  >
+                    <QrCode className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
+              {/* Grid de Datos Bancarios */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block font-medium flex items-center space-x-1">
+                    <Phone className="w-3 h-3 text-slate-500" />
+                    <span>Teléfono:</span>
+                  </span>
+                  <strong className="text-slate-100 font-mono text-xs">{acc.telefonoFormateado || acc.telefono}</strong>
+                </div>
+
+                <div className="bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block font-medium flex items-center space-x-1">
+                    <Hash className="w-3 h-3 text-slate-500" />
+                    <span>Cédula / RIF:</span>
+                  </span>
+                  <strong className="text-slate-100 font-mono text-xs">{acc.rif}</strong>
+                </div>
+
+                <div className="col-span-2 bg-slate-950/60 p-2 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block font-medium flex items-center space-x-1">
+                    <User className="w-3 h-3 text-slate-500" />
+                    <span>Titular:</span>
+                  </span>
+                  <strong className="text-slate-200 text-xs truncate block">{acc.titular}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Acciones */}
+            <div className="flex items-center space-x-2 pt-1">
+              <button
+                onClick={() => handleCopyAccount(acc, index)}
+                className={`flex-1 py-2 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all shadow active:scale-95 ${
+                  copiedIndex === index
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                }`}
+              >
+                {copiedIndex === index ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>¡Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-amber-400" />
+                    <span>Copiar Datos</span>
+                  </>
+                )}
+              </button>
 
               <button
                 onClick={() => openQrForAccount(acc)}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-brand-400 border border-slate-700 transition-all active:scale-95"
-                title="Generar QR de esta cuenta"
+                className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-amber-400 text-xs font-bold hover:bg-slate-800 transition-all flex items-center space-x-1"
               >
-                <QrCode className="w-4 h-4" />
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>Ver QR</span>
               </button>
             </div>
-
-            {/* Grid de Datos */}
-            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-400 block font-medium flex items-center space-x-1">
-                  <Phone className="w-3 h-3 text-slate-500" />
-                  <span>Teléfono:</span>
-                </span>
-                <strong className="text-slate-100 font-mono text-xs">{acc.telefonoFormateado || acc.telefono}</strong>
-              </div>
-
-              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-400 block font-medium flex items-center space-x-1">
-                  <Hash className="w-3 h-3 text-slate-500" />
-                  <span>Cédula / RIF:</span>
-                </span>
-                <strong className="text-slate-100 font-mono text-xs">{acc.rif}</strong>
-              </div>
-
-              <div className="col-span-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-400 block font-medium flex items-center space-x-1">
-                  <User className="w-3 h-3 text-slate-500" />
-                  <span>Titular:</span>
-                </span>
-                <strong className="text-slate-200 text-xs">{acc.titular}</strong>
-              </div>
-            </div>
-
-            {/* Botón Copiar Todos los Datos */}
-            <button
-              onClick={() => handleCopyAccount(acc, index)}
-              className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all shadow-md active:scale-95 ${
-                copiedIndex === index
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-              }`}
-            >
-              {copiedIndex === index ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>¡Datos Copiados al Portapapeles!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4 text-brand-500" />
-                  <span>Copiar Datos de Pago Móvil</span>
-                </>
-              )}
-            </button>
           </div>
         ))}
       </div>
 
-      {/* Banner QR de Vista Rápida */}
-      <div 
-        onClick={() => openQrForAccount(bankAccounts[0])}
-        className="bg-gradient-to-r from-brand-900/40 via-surface-card to-slate-900 border border-brand-500/30 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-brand-500 transition-all shadow-lg active:scale-98"
-      >
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 rounded-xl bg-white p-2 flex items-center justify-center shadow-md">
-            <QRCodeSVG value={getQrPayload(bankAccounts[0])} size={40} level="M" />
-          </div>
-          <div>
-            <h4 className="font-extrabold text-white text-sm">QR Escaneable para Cliente</h4>
-            <p className="text-xs text-slate-400">Toca para abrir a pantalla completa</p>
-          </div>
-        </div>
-
-        <Maximize2 className="w-5 h-5 text-brand-500" />
-      </div>
-
-      {/* Modal Pantalla Completa QR */}
+      {/* 4. MODAL PANTALLA COMPLETA: GENERADOR DE QR INTERBANCARIO SUICHE 7B */}
       {isQrModalOpen && activeAccount && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 animate-fade-in overflow-y-auto">
           
           <button
             onClick={() => setIsQrModalOpen(false)}
-            className="absolute top-6 right-6 p-3 rounded-full bg-slate-800 text-white hover:bg-slate-700 transition-transform active:scale-90"
+            className="absolute top-4 right-4 p-2.5 rounded-full bg-slate-800 text-slate-300 hover:text-white transition-transform active:scale-90 z-10"
           >
             <X className="w-6 h-6" />
           </button>
 
-          <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-xs w-full text-center space-y-4 animate-scale-in">
-            <div>
-              <h3 className="font-extrabold text-slate-900 text-lg">PAGO MÓVIL RÁPIDO</h3>
-              <p className="text-xs text-slate-500 font-medium">Escanea con la App de tu banco</p>
+          <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center space-y-3.5 animate-scale-in my-auto">
+            
+            {/* Header Modal Estilo Banco / Suiche 7B */}
+            <div className="space-y-1">
+              <div className="inline-flex items-center space-x-1.5 bg-rose-50 px-3 py-1 rounded-full border border-rose-200 text-rose-700 text-[10px] font-black uppercase tracking-wider">
+                <span>Suiche 7B / C2P Interbancario</span>
+              </div>
+              <h3 className="font-black text-slate-900 text-lg sm:text-xl leading-tight">PAGO MÓVIL RÁPIDO</h3>
+              <p className="text-xs text-slate-500 font-medium">Escanea directamente desde la app de tu banco</p>
+            </div>
+
+            {/* Display Monto a Cobrar en Bs */}
+            <div className="bg-slate-900 text-white rounded-2xl p-3 border border-slate-800 shadow-inner">
+              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total a Cobrar:</div>
+              <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
+                {montoBs ? parseFloat(montoBs).toLocaleString('es-VE', { minimumFractionDigits: 2 }) : '0.00'} <span className="text-xs font-bold text-slate-300">Bs</span>
+              </div>
+              {montoUsd && (
+                <div className="text-[11px] text-emerald-400 font-mono font-bold mt-0.5">
+                  ≈ ${parseFloat(montoUsd).toFixed(2)} USD
+                </div>
+              )}
             </div>
 
             {/* Contenedor del QR Real SVG */}
-            <div className="w-64 h-64 mx-auto bg-white p-4 rounded-2xl border-2 border-slate-200 flex items-center justify-center shadow-inner">
+            <div className="w-64 h-64 sm:w-68 sm:h-68 mx-auto bg-white p-3 rounded-2xl border-2 border-slate-200 flex flex-col items-center justify-center shadow-inner relative">
               <QRCodeSVG 
                 value={getQrPayload(activeAccount)} 
                 size={220}
                 level="H"
                 includeMargin={true}
               />
+              {/* Insignia central estilizada Suiche 7B */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="bg-white border-2 border-rose-600 px-2 py-0.5 rounded-md shadow-md text-[9px] font-black text-rose-700 tracking-tighter">
+                  7B
+                </div>
+              </div>
             </div>
 
-            {/* Selector de formato del QR (para probar compatibilidad del scanner) */}
-            <div className="flex items-center justify-between bg-slate-100 p-1.5 rounded-xl text-[11px] font-bold">
-              <button
-                onClick={() => setQrFormatMode('standard')}
-                className={`flex-1 py-1 rounded-lg transition-all ${
-                  qrFormatMode === 'standard' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Cifrado BDV ({activeAccount.codigoBanco}|{activeAccount.cedulaNumero})
-              </button>
-              <button
-                onClick={() => setQrFormatMode('readable')}
-                className={`flex-1 py-1 rounded-lg transition-all ${
-                  qrFormatMode === 'readable' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Texto Plano
-              </button>
+            {/* Selector de formato estándar del QR */}
+            <div className="space-y-1 text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Formato Estándar del Escáner:</span>
+              <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl text-[10px] font-extrabold">
+                <button
+                  onClick={() => setQrFormatMode('suiche7b')}
+                  className={`py-1.5 px-2 rounded-lg transition-all ${
+                    qrFormatMode === 'suiche7b' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Suiche 7B (JSON)
+                </button>
+                <button
+                  onClick={() => setQrFormatMode('c2p_pipe')}
+                  className={`py-1.5 px-2 rounded-lg transition-all ${
+                    qrFormatMode === 'c2p_pipe' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  BDV C2P (Pipe |)
+                </button>
+                <button
+                  onClick={() => setQrFormatMode('uri')}
+                  className={`py-1.5 px-2 rounded-lg transition-all ${
+                    qrFormatMode === 'uri' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  URI (pagomovil://)
+                </button>
+                <button
+                  onClick={() => setQrFormatMode('readable')}
+                  className={`py-1.5 px-2 rounded-lg transition-all ${
+                    qrFormatMode === 'readable' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Texto Plano
+                </button>
+              </div>
             </div>
 
-            <div className="bg-slate-100 p-3 rounded-xl text-left text-xs space-y-1 text-slate-700">
+            {/* Resumen de Datos de la Cuenta */}
+            <div className="bg-slate-50 p-2.5 rounded-xl text-left text-xs space-y-0.5 text-slate-700 border border-slate-200">
               <p><strong>Banco:</strong> {activeAccount.banco}</p>
               <p><strong>Cédula/RIF:</strong> {activeAccount.rif}</p>
               <p><strong>Teléfono:</strong> {activeAccount.telefonoFormateado || activeAccount.telefono}</p>
+              <p className="truncate"><strong>Titular:</strong> {activeAccount.titular}</p>
             </div>
 
-            <button
-              onClick={() => setIsQrModalOpen(false)}
-              className="w-full py-3 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition-all shadow-md"
-            >
-              Cerrar QR
-            </button>
+            {/* Botones de Acción */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                onClick={() => {
+                  const text = `PAGO MÓVIL:\nBanco: ${activeAccount.banco}\nCI/RIF: ${activeAccount.rif}\nTeléfono: ${activeAccount.telefonoFormateado || activeAccount.telefono}${montoBs ? `\nMonto: ${montoBs} Bs.` : ''}`;
+                  navigator.clipboard.writeText(text);
+                  alert('¡Datos copiados al portapapeles!');
+                }}
+                className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center justify-center space-x-1"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copiar Datos</span>
+              </button>
+
+              <button
+                onClick={() => setIsQrModalOpen(false)}
+                className="py-2.5 rounded-xl bg-rose-700 text-white font-bold text-xs hover:bg-rose-800 transition-all shadow-md"
+              >
+                Cerrar QR
+              </button>
+            </div>
+
           </div>
 
+        </div>
+      )}
+
+      {/* 5. MODAL EDICIÓN DE CUENTA BANCARIA */}
+      {isEditAccountModalOpen && editingAccount && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#0f172a] border border-slate-700 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl animate-scale-in text-white">
+            
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <h3 className="font-extrabold text-sm flex items-center space-x-1.5">
+                <Edit3 className="w-4 h-4 text-amber-400" />
+                <span>Configurar Cuenta Bancaria</span>
+              </h3>
+              <button
+                onClick={() => setIsEditAccountModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAccountForm} className="space-y-3 text-xs">
+              <div>
+                <label className="text-slate-400 font-bold block mb-1">Nombre del Banco & Código:</label>
+                <input
+                  type="text"
+                  required
+                  value={editingAccount.banco}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const codeMatch = val.match(/\d{4}/);
+                    setEditingAccount(prev => ({
+                      ...prev,
+                      banco: val,
+                      codigoBanco: codeMatch ? codeMatch[0] : prev.codigoBanco
+                    }));
+                  }}
+                  placeholder="ej: 0102 - Banco de Venezuela"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 font-bold block mb-1">Cédula o RIF:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingAccount.rif}
+                    onChange={(e) => setEditingAccount(prev => ({ ...prev, rif: e.target.value.toUpperCase() }))}
+                    placeholder="V-23654575"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-400 font-bold block mb-1">Teléfono:</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingAccount.telefonoFormateado || editingAccount.telefono}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const clean = raw.replace(/[^0-9]/g, '');
+                      setEditingAccount(prev => ({
+                        ...prev,
+                        telefono: clean,
+                        telefonoFormateado: raw
+                      }));
+                    }}
+                    placeholder="0424-1346969"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-400 font-bold block mb-1">Titular de la Cuenta:</label>
+                <input
+                  type="text"
+                  required
+                  value={editingAccount.titular}
+                  onChange={(e) => setEditingAccount(prev => ({ ...prev, titular: e.target.value }))}
+                  placeholder="Nombre de la empresa o persona"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 font-bold block mb-1">Etiqueta / Badge:</label>
+                <input
+                  type="text"
+                  value={editingAccount.badge}
+                  onChange={(e) => setEditingAccount(prev => ({ ...prev, badge: e.target.value }))}
+                  placeholder="ej: Principal (BDV)"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center space-x-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-black text-xs hover:bg-amber-400 transition-all shadow"
+                >
+                  Guardar Cuenta
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteAccount(editingAccount.id)}
+                  className="py-2.5 px-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 font-bold text-xs hover:bg-red-500/20 transition-all"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </form>
+
+          </div>
         </div>
       )}
 
     </div>
   );
 }
-

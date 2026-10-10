@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Delete, Copy, Check, Calculator, Plus, Trash2, ShoppingBag, X } from 'lucide-react';
 
-export default function BcvModule({ bcvRate }) {
+export default function BcvModule({ bcvRate, onSaveManualBcv }) {
   const [items, setItems] = useState([]); // Lista de montos sumados [15, 20, 12.5]
   const [usdInput, setUsdInput] = useState('');
   const [copied, setCopied] = useState(false);
@@ -96,6 +96,32 @@ export default function BcvModule({ bcvRate }) {
   return (
     <div className="flex-1 flex flex-col justify-start p-3 sm:p-5 max-w-lg md:max-w-4xl mx-auto w-full h-full overflow-y-auto no-scrollbar space-y-3.5 pb-[calc(4.5rem+env(safe-area-inset-bottom,16px))]">
       
+      {/* Banner Alerta de Conexión / Fallback */}
+      {bcvRate?.alerta && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 flex items-center justify-between text-xs text-amber-300">
+          <div className="flex items-center space-x-2">
+            <span>⚠️</span>
+            <span>{bcvRate.alerta}</span>
+          </div>
+          {onSaveManualBcv && (
+            <button
+              onClick={() => {
+                const val = prompt('Ingrese la tasa BCV manualmente (ej: 876.79):', tasa > 0 ? tasa.toFixed(2) : '');
+                if (val) {
+                  const num = parseFloat(val);
+                  if (!isNaN(num) && num > 0) {
+                    onSaveManualBcv(num, null, 'Ingreso Manual');
+                  }
+                }
+              }}
+              className="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-extrabold text-[11px] shrink-0 hover:bg-amber-400 transition-all shadow"
+            >
+              Fijar Tasa
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Grid Responsivo: 1 columna en móvil, 2 columnas en Desktop Web (md:) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 md:gap-6 items-start">
         
@@ -114,9 +140,21 @@ export default function BcvModule({ bcvRate }) {
                 <Calculator className="w-4 h-4 text-brand-gold" />
                 <span>Calculadora BCV</span>
               </span>
-              <span className="font-mono bg-brand-gold/10 text-brand-gold px-2.5 py-0.5 rounded-full font-bold text-xs">
-                1 USD = {tasa.toFixed(2)} Bs
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="font-mono bg-brand-gold/10 text-brand-gold px-2.5 py-0.5 rounded-full font-bold text-xs">
+                  1 USD = {tasa.toFixed(2)} Bs
+                </span>
+                {bcvRate?.fecha_valor && (
+                  <span className="text-[10px] text-amber-300 font-semibold mt-1 flex items-center space-x-1">
+                    <span>🗓️ {bcvRate.fecha_valor}</span>
+                    {bcvRate?.es_fin_de_semana && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full font-extrabold border border-amber-500/30">
+                        Próx. Día Hábil
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Display Principal: Monto USD */}

@@ -228,9 +228,11 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                                         onAddToCart({
                                           id: `${item.id}-${colorGroup.color}-${varItem.talla}`,
                                           modelId: item.id,
+                                          erp_product_id: item.erp_product_id || item.id,
                                           nombre: item.nombre,
                                           color: colorGroup.color,
                                           talla: varItem.talla,
+                                          sku: varItem.sku || `${item.id}-${colorGroup.color}-${varItem.talla}`,
                                           precio_usd: item.precio_usd,
                                           cant: 1
                                         });

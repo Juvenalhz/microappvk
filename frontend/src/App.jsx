@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
+import Sidebar from './components/Sidebar';
 import StockModule from './components/StockModule';
+import KpiModule from './components/KpiModule';
 import BcvModule from './components/BcvModule';
 import BinanceBrechaModule from './components/BinanceBrechaModule';
 import PagoMovilModule from './components/PagoMovilModule';
@@ -89,11 +91,24 @@ export default function App() {
   const [bcvRate, setBcvRate] = useState(() => {
     try {
       const cached = localStorage.getItem('vk_bcv_cache');
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.tasa && Number(parsed.tasa) >= 876 && parsed.fecha_valor) {
+          return parsed;
+        }
+      }
     } catch (e) {
       console.warn('[App] Error al leer vk_bcv_cache inicial:', e);
     }
-    return { tasa: 36.50, fuente: 'Cache Inicial' };
+    return { 
+      tasa: 876.79, 
+      tasa_bcv: 876.79, 
+      binance: 1011.99, 
+      tasa_binance: 1011.99, 
+      fuente: 'BCV Oficial (Próximo Día Hábil)', 
+      fecha_valor: 'Martes, 13 Octubre 2026', 
+      es_fin_de_semana: true 
+    };
   });
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -125,14 +140,15 @@ export default function App() {
   }, []);
 
   // Cargar tasa BCV
-  const fetchBcvRate = useCallback(async () => {
+  const fetchBcvRate = useCallback(async (forceRefresh = false) => {
     try {
-      let res = await fetch('https://microapp-vk-bff.jjhernandezz100.workers.dev/api/bcv');
-      if (!res.ok) res = await fetch('/api/bcv');
+      const param = forceRefresh ? '?refresh=true' : '';
+      let res = await fetch(`https://microapp-vk-bff.jjhernandezz100.workers.dev/api/bcv${param}`);
+      if (!res.ok) res = await fetch(`/api/bcv${param}`);
 
       if (res.ok) {
         const data = await res.json();
-        if (data && data.tasa) {
+        if (data && (data.tasa || data.tasa_bcv)) {
           setBcvRate(data);
           localStorage.setItem('vk_bcv_cache', JSON.stringify(data));
         }
@@ -141,6 +157,37 @@ export default function App() {
       console.warn('[App] Error al consultar /api/bcv, usando cache local:', err);
     }
   }, []);
+
+  // Guardar tasa BCV o Binance ingresada manualmente por el usuario
+  const handleSaveManualBcvRate = async (manualTasa, manualBinance = null, fechaValor = 'Ingreso Manual') => {
+    try {
+      const payload = { tasa: manualTasa, binance: manualBinance, fecha_valor: fechaValor };
+      let res = await fetch('https://microapp-vk-bff.jjhernandezz100.workers.dev/api/bcv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        res = await fetch('/api/bcv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.bcv) {
+          setBcvRate(json.bcv);
+          localStorage.setItem('vk_bcv_cache', JSON.stringify(json.bcv));
+          return true;
+        }
+      }
+    } catch (e) {
+      console.error('[App] Error al guardar tasa manual:', e);
+    }
+    return false;
+  };
 
   // Cargar inventario filtrado
   const fetchStock = useCallback(async (query = '') => {
@@ -271,32 +318,45 @@ export default function App() {
           setLastSync(json.last_sync);
         }
       } else {
-        await Promise.all([fetchBcvRate(), fetchStock(searchTerm)]);
+        await Promise.all([fetchBcvRate(true), fetchStock(searchTerm)]);
       }
     } catch (err) {
       console.warn('[App] Error al forzar sincronización manual en vivo:', err);
-      await Promise.all([fetchBcvRate(), fetchStock(searchTerm)]);
+      await Promise.all([fetchBcvRate(true), fetchStock(searchTerm)]);
     } finally {
       setIsSyncing(false);
     }
   };
 
   return (
-    <div className="flex flex-col min-h-screen h-screen w-full bg-[#0b0f19] text-slate-100 font-sans relative">
+    <div className="flex flex-col md:flex-row min-h-screen h-screen w-full bg-[#0b0f19] text-slate-100 font-sans overflow-hidden relative">
       
-      {/* Header Fijo */}
-      <Header 
+      {/* Sidebar para pantallas Desktop (Web) */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
         bcvRate={bcvRate}
         isOnline={isOnline}
         isSyncing={isSyncing}
         onRefresh={handleRefresh}
-        lastSync={lastSync}
         ticketCount={totalTicketCount}
         onOpenTicket={() => setIsTicketOpen(true)}
       />
 
-      {/* Contenido Dinámico Según Pestaña Seleccionada */}
-      <main className="flex-1 overflow-hidden relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {/* Header Fijo Móvil */}
+        <Header 
+          bcvRate={bcvRate}
+          isOnline={isOnline}
+          isSyncing={isSyncing}
+          onRefresh={handleRefresh}
+          lastSync={lastSync}
+          ticketCount={totalTicketCount}
+          onOpenTicket={() => setIsTicketOpen(true)}
+        />
+
+        {/* Contenido Dinámico Según Pestaña Seleccionada */}
+        <main className="flex-1 overflow-hidden relative">
         {activeTab === 'stock' && (
           <StockModule
             stockData={stockData}
@@ -310,16 +370,20 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'kpi' && (
+          <KpiModule bcvRate={bcvRate} />
+        )}
+
         {activeTab === 'bcv' && (
-          <BcvModule bcvRate={bcvRate} />
+          <BcvModule bcvRate={bcvRate} onSaveManualBcv={handleSaveManualBcvRate} />
         )}
 
         {activeTab === 'binance' && (
-          <BinanceBrechaModule bcvRate={bcvRate} onRefreshRates={fetchBcvRate} />
+          <BinanceBrechaModule bcvRate={bcvRate} onRefreshRates={fetchBcvRate} onSaveManualBcv={handleSaveManualBcvRate} />
         )}
 
         {activeTab === 'pago' && (
-          <PagoMovilModule />
+          <PagoMovilModule bcvRate={bcvRate} />
         )}
       </main>
 
@@ -335,6 +399,7 @@ export default function App() {
         bcvRate={bcvRate}
       />
 
+      </div>
     </div>
   );
 }
