@@ -26,186 +26,80 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
   const [editingAccount, setEditingAccount] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
 
-  // Formato del QR Interbancario: 'suiche7b' (JSON) | 'c2p_pipe' (Pipe BDV) | 'uri' (pagomovil://) | 'readable' (Texto)
-  const [qrFormatMode, setQrFormatMode] = useState('suiche7b'); 
-
-  // Campos de Monto a cobrar
-  const [montoUsd, setMontoUsd] = useState(initialAmountUsd || '');
-  const [montoBs, setMontoBs] = useState('');
-
-  const rawTasa = bcvRate ? Number(bcvRate.tasa) : 876.79;
-  const tasa = Math.floor(rawTasa * 100) / 100;
-
-  // Cuentas de Pago Móvil precacheadas y editables por la tienda
-  const [bankAccounts, setBankAccounts] = useState(() => {
+  // Formato del QR Interbancario (9 Variantes de prueba)
+  const [qrFormatMode, setQrFormatMode] = useState(() => {
     try {
-      const cached = localStorage.getItem('vk_pago_movil_accounts');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
+      return localStorage.getItem('vk_pago_movil_qr_format') || 'suiche7b_std';
     } catch (e) {
-      console.warn('[PagoMovil] Error al leer cuentas guardadas:', e);
+      return 'suiche7b_std';
     }
-    return [
-      {
-        id: 1,
-        banco: "0102 - Banco de Venezuela",
-        codigoBanco: "0102",
-        rif: "V-23654575",
-        cedulaNumero: "23654575",
-        telefono: "04241346969",
-        telefonoFormateado: "0424-1346969",
-        titular: "VK MEN Tienda",
-        color: "from-blue-600 to-indigo-700",
-        badge: "Principal (BDV)"
-      },
-      {
-        id: 2,
-        banco: "0134 - Banesco",
-        codigoBanco: "0134",
-        rif: "J-500123456",
-        cedulaNumero: "500123456",
-        telefono: "04129876543",
-        telefonoFormateado: "0412-9876543",
-        titular: "VK MEN C.A.",
-        color: "from-emerald-600 to-teal-700",
-        badge: "Secundaria (Banesco)"
-      }
-    ];
   });
 
-  const activeAccount = selectedAccount || bankAccounts[0];
-
-  // Persistir cuentas bancarias
-  const saveAccounts = (newAccounts) => {
-    setBankAccounts(newAccounts);
+  const saveQrFormat = (mode) => {
+    setQrFormatMode(mode);
     try {
-      localStorage.setItem('vk_pago_movil_accounts', JSON.stringify(newAccounts));
+      localStorage.setItem('vk_pago_movil_qr_format', mode);
     } catch (e) {
-      console.warn('[PagoMovil] Error al guardar cuentas:', e);
+      console.warn('[PagoMovil] Error al guardar formato QR:', e);
     }
   };
 
-  // Cálculo automático entre USD y Bs
-  const handleUsdChange = (val) => {
-    setMontoUsd(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && num > 0) {
-      const calculatedBs = (num * tasa).toFixed(2);
-      setMontoBs(calculatedBs);
-    } else {
-      setMontoBs('');
-    }
-  };
-
-  const handleBsChange = (val) => {
-    setMontoBs(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && num > 0 && tasa > 0) {
-      const calculatedUsd = (num / tasa).toFixed(2);
-      setMontoUsd(calculatedUsd);
-    } else {
-      setMontoUsd('');
-    }
-  };
-
-  const handleCopyAccount = (acc, index) => {
-    const bsText = montoBs ? `\nMonto a pagar: ${montoBs} Bs.` : '';
-    const textToCopy = `PAGO MÓVIL:\nBanco: ${acc.banco}\nCédula/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}\nTitular: ${acc.titular}${bsText}`;
-    navigator.clipboard.writeText(textToCopy);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
-
-  const openQrForAccount = (acc) => {
-    setSelectedAccount(acc);
-    setIsQrModalOpen(true);
-  };
-
-  const openEditModal = (acc = null) => {
-    if (acc) {
-      setEditingAccount({ ...acc });
-    } else {
-      setEditingAccount({
-        id: Date.now(),
-        banco: "0102 - Banco de Venezuela",
-        codigoBanco: "0102",
-        rif: "V-00000000",
-        cedulaNumero: "00000000",
-        telefono: "04140000000",
-        telefonoFormateado: "0414-0000000",
-        titular: "Nombre del Titular",
-        color: "from-blue-600 to-indigo-700",
-        badge: "Cuenta Adicional"
-      });
-    }
-    setIsEditAccountModalOpen(true);
-  };
-
-  const handleSaveAccountForm = (e) => {
-    e.preventDefault();
-    if (!editingAccount) return;
-
-    const exists = bankAccounts.some(a => a.id === editingAccount.id);
-    let updated = [];
-    if (exists) {
-      updated = bankAccounts.map(a => a.id === editingAccount.id ? editingAccount : a);
-    } else {
-      updated = [...bankAccounts, editingAccount];
-    }
-
-    saveAccounts(updated);
-    if (selectedAccount && selectedAccount.id === editingAccount.id) {
-      setSelectedAccount(editingAccount);
-    }
-    setIsEditAccountModalOpen(false);
-  };
-
-  const handleDeleteAccount = (id) => {
-    if (bankAccounts.length <= 1) {
-      alert('Debe haber al menos una cuenta registrada.');
-      return;
-    }
-    if (confirm('¿Deseas eliminar esta cuenta de Pago Móvil?')) {
-      const updated = bankAccounts.filter(a => a.id !== id);
-      saveAccounts(updated);
-      if (selectedAccount && selectedAccount.id === id) {
-        setSelectedAccount(updated[0]);
-      }
-    }
-  };
-
-  // Genera el payload QR según el estándar bancario de Venezuela
-  // 1. suiche7b (JSON Suiche 7B / C2P Interbancario): {"banco":"0102","doc":"V23654575","telefono":"04241346969","monto":"150.00"}
-  // 2. c2p_pipe (BDV / Banesco Pipe): 0102|V23654575|04241346969|150.00
-  // 3. uri (Pago Móvil URI): pagomovil://0102?doc=V23654575&phone=04241346969&amount=150.00
-  // 4. readable (Texto Plano)
-  const getQrPayload = (acc) => {
+  // Genera el payload QR según el estándar o formato de prueba seleccionado
+  const getQrPayload = (acc, mode = qrFormatMode) => {
     if (!acc) return '';
     const cleanPhone = acc.telefono.replace(/[^0-9]/g, '');
-    const cleanDoc = acc.rif.replace(/[^0-9VJEGvjeg]/g, '').toUpperCase();
+    const cleanDocWithLetter = acc.rif.replace(/[^0-9VJEGvjeg]/g, '').toUpperCase();
+    const cleanDocNum = acc.rif.replace(/[^0-9]/g, '');
     const bankCode = acc.codigoBanco || '0102';
     const amountVal = parseFloat(montoBs);
     const amountFormatted = !isNaN(amountVal) && amountVal > 0 ? amountVal.toFixed(2) : '0.00';
 
-    if (qrFormatMode === 'suiche7b') {
-      // Estándar oficial JSON Suiche 7B / Interbancario
-      return JSON.stringify({
-        banco: bankCode,
-        doc: cleanDoc,
-        telefono: cleanPhone,
-        monto: amountFormatted
-      });
-    } else if (qrFormatMode === 'c2p_pipe') {
-      // Estándar C2P Pipe BDV / Banesco
-      return `${bankCode}|${cleanDoc}|${cleanPhone}|${amountFormatted}`;
-    } else if (qrFormatMode === 'uri') {
-      // Estándar URI
-      return `pagomovil://${bankCode}?doc=${cleanDoc}&phone=${cleanPhone}&amount=${amountFormatted}`;
-    } else {
-      // Texto Plano Legible
-      return `PAGO MOVIL\nBanco: ${acc.banco}\nCI/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}${amountVal > 0 ? `\nMonto: ${amountFormatted} Bs` : ''}`;
+    switch (mode) {
+      case 'suiche7b_std':
+        return JSON.stringify({
+          banco: bankCode,
+          doc: cleanDocWithLetter,
+          telefono: cleanPhone,
+          monto: amountFormatted
+        });
+      case 'suiche7b_nodocletter':
+        return JSON.stringify({
+          banco: bankCode,
+          doc: cleanDocNum,
+          telefono: cleanPhone,
+          monto: amountFormatted
+        });
+      case 'suiche7b_short':
+        return JSON.stringify({
+          b: bankCode,
+          c: cleanDocWithLetter,
+          t: cleanPhone,
+          m: amountFormatted
+        });
+      case 'suiche7b_short_nodocletter':
+        return JSON.stringify({
+          b: bankCode,
+          c: cleanDocNum,
+          t: cleanPhone,
+          m: amountFormatted
+        });
+      case 'bdv_pipe':
+        return `${bankCode}|${cleanDocWithLetter}|${cleanPhone}|${amountFormatted}`;
+      case 'bdv_pipe_nodocletter':
+        return `${bankCode}|${cleanDocNum}|${cleanPhone}|${amountFormatted}`;
+      case 'c2p_prefix':
+        return `C2P|${bankCode}|${cleanDocWithLetter}|${cleanPhone}|${amountFormatted}`;
+      case 'uri_pagomovil':
+        return `pagomovil://${bankCode}?doc=${cleanDocWithLetter}&phone=${cleanPhone}&amount=${amountFormatted}`;
+      case 'readable':
+        return `PAGO MOVIL\nBanco: ${acc.banco}\nCI/RIF: ${acc.rif}\nTeléfono: ${acc.telefonoFormateado || acc.telefono}${amountVal > 0 ? `\nMonto: ${amountFormatted} Bs` : ''}`;
+      default:
+        return JSON.stringify({
+          banco: bankCode,
+          doc: cleanDocWithLetter,
+          telefono: cleanPhone,
+          monto: amountFormatted
+        });
     }
   };
 
@@ -437,7 +331,7 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
               <QRCodeSVG 
                 value={getQrPayload(activeAccount)} 
                 size={220}
-                level="H"
+                level="M"
                 includeMargin={true}
               />
               {/* Insignia central estilizada Suiche 7B */}
@@ -448,42 +342,97 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
               </div>
             </div>
 
-            {/* Selector de formato estándar del QR */}
-            <div className="space-y-1 text-left">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Formato Estándar del Escáner:</span>
-              <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl text-[10px] font-extrabold">
+            {/* 🧪 LABORATORIO DE PRUEBAS CONTROLADAS */}
+            <div className="space-y-2 text-left bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1">
+                  <span>🧪 Laboratorio de Formatos QR:</span>
+                </span>
                 <button
-                  onClick={() => setQrFormatMode('suiche7b')}
-                  className={`py-1.5 px-2 rounded-lg transition-all ${
-                    qrFormatMode === 'suiche7b' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  onClick={() => saveQrFormat(qrFormatMode)}
+                  className="text-[10px] font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded-lg transition-all flex items-center space-x-1 shadow-sm"
+                  title="Guardar este formato como predeterminado"
+                >
+                  <Check className="w-3 h-3" />
+                  <span>Guardar por Defecto</span>
+                </button>
+              </div>
+
+              <p className="text-[10px] text-slate-500 font-medium leading-snug">
+                Escanea con la app de tu banco. Haz clic en cada variante hasta que tu app autocomplete el banco, cédula, teléfono y monto:
+              </p>
+
+              <div className="grid grid-cols-2 gap-1 text-[10px] font-bold">
+                <button
+                  onClick={() => setQrFormatMode('suiche7b_std')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'suiche7b_std' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  Suiche 7B (JSON)
+                  1. Suiche 7B (JSON V/J)
                 </button>
                 <button
-                  onClick={() => setQrFormatMode('c2p_pipe')}
-                  className={`py-1.5 px-2 rounded-lg transition-all ${
-                    qrFormatMode === 'c2p_pipe' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  onClick={() => setQrFormatMode('suiche7b_nodocletter')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'suiche7b_nodocletter' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  BDV C2P (Pipe |)
+                  2. Suiche 7B (JSON N°)
                 </button>
                 <button
-                  onClick={() => setQrFormatMode('uri')}
-                  className={`py-1.5 px-2 rounded-lg transition-all ${
-                    qrFormatMode === 'uri' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  onClick={() => setQrFormatMode('suiche7b_short')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'suiche7b_short' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  URI (pagomovil://)
+                  3. JSON Corto (b,c,t,m)
                 </button>
                 <button
-                  onClick={() => setQrFormatMode('readable')}
-                  className={`py-1.5 px-2 rounded-lg transition-all ${
-                    qrFormatMode === 'readable' ? 'bg-rose-700 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  onClick={() => setQrFormatMode('suiche7b_short_nodocletter')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'suiche7b_short_nodocletter' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
-                  Texto Plano
+                  4. JSON Corto (N°)
                 </button>
+                <button
+                  onClick={() => setQrFormatMode('bdv_pipe')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'bdv_pipe' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  5. BDV Pipe (0102|V..)
+                </button>
+                <button
+                  onClick={() => setQrFormatMode('bdv_pipe_nodocletter')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'bdv_pipe_nodocletter' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  6. BDV Pipe (Sólo N°)
+                </button>
+                <button
+                  onClick={() => setQrFormatMode('c2p_prefix')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'c2p_prefix' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  7. C2P Pipe (C2P|01..)
+                </button>
+                <button
+                  onClick={() => setQrFormatMode('uri_pagomovil')}
+                  className={`py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'uri_pagomovil' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  8. URI pagomovil://
+                </button>
+              </div>
+
+              {/* Inspector de Texto Plano del QR */}
+              <div className="bg-slate-900 text-amber-300 p-2 rounded-xl text-[10px] font-mono break-all border border-slate-800 relative space-y-1">
+                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Texto codificado dentro del QR:</div>
+                <div>{getQrPayload(activeAccount)}</div>
               </div>
             </div>
 
