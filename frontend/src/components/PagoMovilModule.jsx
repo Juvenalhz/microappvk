@@ -73,7 +73,8 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
         telefonoFormateado: "0424-1346969",
         titular: "VK MEN Tienda",
         color: "from-blue-600 to-indigo-700",
-        badge: "Principal (BDV)"
+        badge: "Principal (BDV)",
+        bdvToken: "jLLo+CSIEzh94qhKZk++ZEDapZ4ijsatoBMJxjr1RpvUVrotlV4e99cF4bF1J0Sk8baMxxYi6Vhzij9NRxQyvfTKUZQ1MPHAyoQw3cwHlZU+UYACwmOy+N3iES1QbS4uOnZUapHM9baN/b2Sh9SXpdNfSPTN1StajR1cDPBvHlqL19D0eJcw0K2XLL2HKgxp?merchantId=0102&strong_id=1791657406-1"
       },
       {
         id: 2,
@@ -202,6 +203,12 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
     const amountFormatted = !isNaN(amountVal) && amountVal > 0 ? amountVal.toFixed(2) : '0.00';
 
     switch (mode) {
+      case 'bdv_official':
+        const rawBdvToken = acc.bdvToken || 'jLLo+CSIEzh94qhKZk++ZEDapZ4ijsatoBMJxjr1RpvUVrotlV4e99cF4bF1J0Sk8baMxxYi6Vhzij9NRxQyvfTKUZQ1MPHAyoQw3cwHlZU+UYACwmOy+N3iES1QbS4uOnZUapHM9baN/b2Sh9SXpdNfSPTN1StajR1cDPBvHlqL19D0eJcw0K2XLL2HKgxp?merchantId=0102&strong_id=1791657406-1';
+        if (amountVal > 0) {
+          return `${rawBdvToken}&monto=${amountFormatted}`;
+        }
+        return rawBdvToken;
       case 'suiche7b_std':
         return JSON.stringify({
           banco: bankCode,
@@ -511,6 +518,14 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
 
               <div className="grid grid-cols-2 gap-1 text-[10px] font-bold">
                 <button
+                  onClick={() => setQrFormatMode('bdv_official')}
+                  className={`col-span-2 py-1.5 px-2 rounded-lg text-left transition-all ${
+                    qrFormatMode === 'bdv_official' ? 'bg-emerald-600 text-white font-black shadow' : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-300'
+                  }`}
+                >
+                  ⭐ BDV Token Oficial (BDVenlínea)
+                </button>
+                <button
                   onClick={() => setQrFormatMode('suiche7b_std')}
                   className={`py-1.5 px-2 rounded-lg text-left transition-all ${
                     qrFormatMode === 'suiche7b_std' ? 'bg-rose-700 text-white font-extrabold shadow' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
@@ -707,10 +722,21 @@ export default function PagoMovilModule({ bcvRate, initialAmountUsd = '' }) {
                 <label className="text-slate-400 font-bold block mb-1">Etiqueta / Badge:</label>
                 <input
                   type="text"
-                  value={editingAccount.badge}
+                  value={editingAccount.badge || ''}
                   onChange={(e) => setEditingAccount(prev => ({ ...prev, badge: e.target.value }))}
                   placeholder="ej: Principal (BDV)"
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-amber-300 font-bold block mb-1">Token BDV Oficial / Código QR BDVenlínea (Opcional):</label>
+                <textarea
+                  rows={2}
+                  value={editingAccount.bdvToken || ''}
+                  onChange={(e) => setEditingAccount(prev => ({ ...prev, bdvToken: e.target.value.trim() }))}
+                  placeholder="Pega aquí el texto extraído de tu QR oficial de BDVenlínea..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono text-[10px] focus:outline-none focus:border-amber-400 break-all"
                 />
               </div>
 
