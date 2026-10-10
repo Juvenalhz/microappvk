@@ -16,7 +16,7 @@ import {
   Trash2
 } from 'lucide-react';
 
-// Helper para comprimir y convertir imágenes a Base64 liviano
+// Helper para comprimir y convertir imágenes a Base64 súper liviano (< 60KB)
 function processImageFile(file, callback) {
   if (!file) return;
   const reader = new FileReader();
@@ -24,8 +24,8 @@ function processImageFile(file, callback) {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 900;
-      const MAX_HEIGHT = 900;
+      const MAX_WIDTH = 600;
+      const MAX_HEIGHT = 600;
       let width = img.width;
       let height = img.height;
 
@@ -46,8 +46,8 @@ function processImageFile(file, callback) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Calidad 0.85 en JPEG
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      // Calidad 0.75 en JPEG (Ultra ligero y súper nítido)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
       callback(dataUrl);
     };
     img.src = event.target.result;
@@ -107,7 +107,7 @@ export default function PagoMovilModule({ bcvRate }) {
   useEffect(() => {
     async function syncAccountsFromKv() {
       try {
-        const res = await fetch('/api/pago-movil');
+        const res = await fetch(`/api/pago-movil?t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.accounts) && data.accounts.length > 0) {
@@ -127,11 +127,14 @@ export default function PagoMovilModule({ bcvRate }) {
     setBankAccounts(newAccounts);
     try {
       localStorage.setItem('vk_pago_movil_accounts', JSON.stringify(newAccounts));
-      fetch('/api/pago-movil', {
+      const res = await fetch('/api/pago-movil', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accounts: newAccounts })
-      }).catch(err => console.warn('[PagoMovil] Sync error:', err));
+      });
+      if (res.ok) {
+        console.log('[PagoMovil] Cuentas e imágenes sincronizadas con éxito en la nube KV');
+      }
     } catch (e) {
       console.warn('[PagoMovil] Error al guardar cuentas:', e);
     }
