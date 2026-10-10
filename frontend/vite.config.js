@@ -41,12 +41,13 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\/api\/bcv/,
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'bcv-api-cache',
+              networkTimeoutSeconds: 3,
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 86400 // 24 Horas
+                maxAgeSeconds: 3600
               },
               cacheableResponse: {
                 statuses: [0, 200]
@@ -55,9 +56,10 @@ export default defineConfig({
           },
           {
             urlPattern: /^https:\/\/.*\/api\/stock/,
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'stock-api-cache',
+              networkTimeoutSeconds: 3,
               expiration: {
                 maxEntries: 50,
                 maxAgeSeconds: 86400
