@@ -1444,8 +1444,133 @@ function getMockErpInventory() {
   ];
 }
 
+/* ==========================================================================
+   KPIs DE VENTAS (FINA ERP /pos/bills)
+   ========================================================================== */
+
+// Venezuela usa UTC-4 todo el año (sin horario de verano)
+const VE_UTC_OFFSET_MS = -4 * 60 * 60 * 1000;
+
+// Límite de páginas por período para no exceder los subrequests del Worker
+const KPI_BILLS_PAGE_SIZE = 100;
+const KPI_BILLS_MAX_PAGES = 20;
+
+// Productos que NO son prendas físicas para conteo de almacén ni ranking de prendas (su venta y costo sí entran en facturación y utilidad)
+const NON_GARMENT_KEYWORDS = ['BOLSA', 'CAJA', 'EMPAQUE', 'ETIQUETA', 'CORRECION', 'CORRECCION', 'AJUSTE', 'ACCESORIO'];
+// Clasificación de prendas (se evalúa primero la categoría del ERP y luego el nombre; si tiene categoría SET es CONJUNTO)
+const CONJUNTO_KEYWORDS = ['SET', 'CONJUNTO'];
+const SUPERIOR_KEYWORDS = ['SWEATER', 'SUETER', 'FRANELA', 'CAMISA', 'SOBRECAMISA', 'CHEMISE', 'CHAQUETA', 'BLUSA', 'TOP', 'JACKET', 'HOODIE', 'SUDADERA', 'VARSITY', 'T-SHIRT', 'TSHIRT', 'POLO', 'CHALECO'];
+const INFERIOR_KEYWORDS = ['PANTALON', 'PANTS', 'JEAN', 'SHORT', 'BERMUDA', 'SKIRT', 'FALDA', 'JOGGER', 'CARGO', 'LEGGING', 'PESCADOR'];
+
+// Regex que exige que la palabra clave empiece en un límite de palabra (evita falsos positivos)
+function buildKeywordRegex(keywords) {
+  const escaped = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`(^|[^A-Z0-9])(${escaped.join('|')})`);
+}
+const NON_GARMENT_RE = buildKeywordRegex(NON_GARMENT_KEYWORDS);
+const CONJUNTO_RE = buildKeywordRegex(CONJUNTO_KEYWORDS);
+const SUPERIOR_RE = buildKeywordRegex(SUPERIOR_KEYWORDS);
+const INFERIOR_RE = buildKeywordRegex(INFERIOR_KEYWORDS);
+
+function normUpper(text) {
+  return normalizeText(text).toUpperCase();
+}
+
+/**
+ * Devuelve 'SUPERIOR' | 'INFERIOR' | 'CONJUNTO' | 'OTRO', o null si NO es una prenda (bolsas, cajas, correcciones, accesorios comodín).
+ */
+function classifyGarment(category, name) {
+  const cat = normUpper(category);
+  const nm = normUpper(name);
+
+  if (NON_GARMENT_RE.test(cat) || NON_GARMENT_RE.test(nm)) return null;
+
+  for (const text of [cat, nm]) {
+    if (!text) continue;
+    if (CONJUNTO_RE.test(text)) return 'CONJUNTO';
+    if (SUPERIOR_RE.test(text)) return 'SUPERIOR';
+    if (INFERIOR_RE.test(text)) return 'INFERIOR';
+  }
+  return 'OTRO';
+}
+
+// Fecha YYYY-MM-DD en hora de Venezuela
+function toVeDateKey(isoDate) {
+  const t = new Date(isoDate).getTime();
+  if (isNaN(t)) return null;
+  return new Date(t + VE_UTC_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function isVesCurrency(method) {
+  const code = (method?.currency?.code || (typeof method?.currency === 'string' ? method.currency : '') || '').toUpperCase();
+  if (code) return code === 'VES' || code === 'VEF' || code === 'BS';
+  return /(^|[^A-Z])(BS|BOLIVAR)/i.test(method?.name || '');
+}
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const pct1 = (part, total) => (total > 0 ? Math.round((part / total) * 1000) / 10 : 0);
+
+function extractBillDocs(res) {
+  if (!res) return [];
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.docs)) return res.docs;
+  if (Array.isArray(res.items)) return res.items;
+  return [];
+}
+
+/**
+ * Descarga TODAS las páginas de /pos/bills del período (no solo las primeras 100 facturas)
+ */
+async function fetchAllBills(env, fromDate, toDate) {
+  const buildPath = (page) =>
+    `/pos/bills?fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}&search=&currentPage=${page}&pageSize=${KPI_BILLS_PAGE_SIZE}&sortedColumn=updatedAt&sortedDirection=desc`;
+
+  const first = await fetchErp(buildPath(1), env);
+  const reportedPages = Math.max(1, Number(first?.totalPages || 1));
+  const pagesToFetch = Math.min(reportedPages, KPI_BILLS_MAX_PAGES);
+
+  let docs = extractBillDocs(first);
+  let failedPages = 0;
+
+  if (pagesToFetch > 1) {
+    const pageNumbers = Array.from({ length: pagesToFetch - 1 }, (_, i) => i + 2);
+    const results = await Promise.all(
+      pageNumbers.map(p =>
+        fetchErp(buildPath(p), env).catch(e => {
+          console.warn(`[KPI] Error al descargar página ${p} de /pos/bills:`, e.message);
+          failedPages++;
+          return null;
+        })
+      )
+    );
+    for (const res of results) docs = docs.concat(extractBillDocs(res));
+  }
+
+  // Eliminar duplicados (si una factura se actualizó mientras se paginaba)
+  const seen = new Set();
+  docs = docs.filter(d => {
+    const id = d?._id || d?.id;
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  return {
+    meta: first || {},
+    docs,
+    dataQuality: {
+      pagesFetched: pagesToFetch - failedPages,
+      pagesReported: reportedPages,
+      truncated: reportedPages > KPI_BILLS_MAX_PAGES,
+      incomplete: failedPages > 0
+    }
+  };
+}
+
 /**
  * GET /api/kpi?fromDate=...&toDate=...&compareFromDate=...&compareToDate=...
+ * Las fechas deben venir como ISO ya ajustadas a la hora de Venezuela (00:00 / 23:59:59 VE)
  */
 async function handleGetKpis(url, env) {
   const fromDate = url.searchParams.get('fromDate') || new Date(Date.now() - 30 * 86400000).toISOString();
@@ -1454,10 +1579,8 @@ async function handleGetKpis(url, env) {
   const compareToDate = url.searchParams.get('compareToDate');
 
   try {
-    const billsPath = `/pos/bills?fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}&search=&currentPage=1&pageSize=100&sortedColumn=updatedAt&sortedDirection=desc`;
-    
     const fetchPromises = [
-      fetchErp(billsPath, env).catch(e => {
+      fetchAllBills(env, fromDate, toDate).catch(e => {
         console.warn('[KPI Handler] Error al consultar /pos/bills principal:', e.message);
         return null;
       }),
@@ -1466,21 +1589,31 @@ async function handleGetKpis(url, env) {
     ];
 
     if (compareFromDate && compareToDate) {
-      const compareBillsPath = `/pos/bills?fromDate=${encodeURIComponent(compareFromDate)}&toDate=${encodeURIComponent(compareToDate)}&search=&currentPage=1&pageSize=100&sortedColumn=updatedAt&sortedDirection=desc`;
-      fetchPromises.push(fetchErp(compareBillsPath, env).catch(() => null));
+      fetchPromises.push(fetchAllBills(env, compareFromDate, compareToDate).catch(() => null));
     }
 
-    const [billsData, catalogRaw, bcvDataRaw, compareBillsData] = await Promise.all(fetchPromises);
+    const [billsResult, catalogRaw, bcvDataRaw, compareBillsResult] = await Promise.all(fetchPromises);
+
+    if (!billsResult) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No se pudieron obtener las facturas de FINA ERP' }),
+        { status: 502, headers: corsHeaders }
+      );
+    }
 
     const catalog = catalogRaw ? JSON.parse(catalogRaw) : [];
-    const bcvData = bcvDataRaw ? JSON.parse(bcvDataRaw) : { tasa: 36.5, binance: 40.0 };
-
-    const parsedKpis = processKpiData(billsData || {}, catalog, bcvData);
-    
-    let comparisonKpis = null;
-    if (compareBillsData) {
-      comparisonKpis = processKpiData(compareBillsData || {}, catalog, bcvData);
+    let bcvData = bcvDataRaw ? JSON.parse(bcvDataRaw) : null;
+    const isBcvStale = !bcvData || !bcvData.updated_at || (Date.now() - new Date(bcvData.updated_at).getTime() > 30 * 60 * 1000);
+    if (isBcvStale) {
+      try {
+        bcvData = await syncBcvRate(env);
+      } catch (e) {
+        bcvData = bcvData || {};
+      }
     }
+
+    const parsedKpis = processKpiData(billsResult, catalog, bcvData);
+    const comparisonKpis = compareBillsResult ? processKpiData(compareBillsResult, catalog, bcvData) : null;
 
     return new Response(
       JSON.stringify({
@@ -1500,223 +1633,415 @@ async function handleGetKpis(url, env) {
   }
 }
 
-function processKpiData(data, catalog, bcvData) {
-  const docs = Array.isArray(data.data) ? data.data : (Array.isArray(data.docs) ? data.docs : (Array.isArray(data.items) ? data.items : []));
+function processKpiData(billsResult, catalog, bcvData) {
+  const meta = billsResult?.meta || {};
+  const allDocs = Array.isArray(billsResult?.docs) ? billsResult.docs : [];
 
-  const totalAmount = Number(data.totalAmount || 0);
-  const totalQuantity = Number(data.totalQuantity || 0);
-  const totalDocs = Number(data.totalDocs || docs.length || 0);
-  const totalCobrado = Number(data.totalCobrado || totalAmount);
-  
-  const avgTicketUsd = totalDocs > 0 ? (totalAmount / totalDocs) : 0;
-  const avgItemsPerTicket = totalDocs > 0 ? (totalQuantity / totalDocs) : 0;
+  // 1. Excluir facturas anuladas
+  const validDocs = allDocs.filter(d => d && d.deleted !== true);
+  const annulledDocs = allDocs.filter(d => d && d.deleted === true);
 
-  // Formas de pago y cálculo de pérdida cambiaria
-  const paymentSummary = Array.isArray(data.paymentSummary) ? data.paymentSummary : [];
-  let vesCollectedTotal = 0;
-  let vesUsdValueBcv = 0;
-  let vesUsdValueBinance = 0;
+  // Brecha cambiaria actual (BCV vs Binance) aplicada sobre la tasa de cada factura
+  const tasaBcvActual = Number(bcvData?.tasa || bcvData?.tasa_bcv) || 0;
+  const tasaBinanceActual = Number(bcvData?.binance || bcvData?.tasa_binance) || 0;
+  const gapRatio = tasaBcvActual > 0 && tasaBinanceActual > tasaBcvActual ? tasaBinanceActual / tasaBcvActual : 1;
 
-  const tasaBcv = bcvData?.tasa || bcvData?.tasa_bcv || 36.5;
-  const tasaBinance = bcvData?.binance || bcvData?.tasa_binance || (tasaBcv * 1.15);
-
-  const paymentMethodsDetailed = paymentSummary.map(pm => {
-    const isVes = pm.currency === 'VES' || (pm.name && (pm.name.toLowerCase().includes('bs') || pm.name.toLowerCase().includes('bolivares') || pm.name.toLowerCase().includes('bdv')));
-    const vesAmt = Number(pm.totalVES || 0);
-    const usdAmt = Number(pm.totalUSD || 0);
-
-    if (isVes && vesAmt > 0) {
-      vesCollectedTotal += vesAmt;
-      const bcvVal = vesAmt / tasaBcv;
-      const binanceVal = vesAmt / tasaBinance;
-      vesUsdValueBcv += bcvVal;
-      vesUsdValueBinance += binanceVal;
-    }
-
-    return {
-      name: pm.name || 'Otro',
-      currency: pm.currency || (isVes ? 'VES' : 'USD'),
-      totalUSD: usdAmt,
-      totalVES: vesAmt,
-      isVes
-    };
-  });
-
-  const exchangeLossUsd = vesUsdValueBcv > 0 && vesUsdValueBinance > 0 ? Math.max(0, vesUsdValueBcv - vesUsdValueBinance) : 0;
-
-  // Canales de venta breakdown
-  const channelsMap = new Map();
-  let superiorSalesUsd = 0, superiorUnits = 0;
-  let inferiorSalesUsd = 0, inferiorUnits = 0;
+  let totalAmount = 0;
+  let productSales = 0;
+  let extraCharges = 0;
+  let deliveryOrdersCount = 0;
+  let nonGarmentSalesUsd = 0;
   let totalUtility = 0;
+  let totalGarments = 0;
 
-  // Agrupamiento diario
+  // Colaboraciones (facturas en $0 USD que sí descuentan costo en la utilidad)
+  let collabDocsCount = 0;
+  let collabUnitsCount = 0;
+  let collabCostUsd = 0;
+
+  // Cuadre exacto de caja y bancos
+  let vesCollected = 0;
+  let vesUsdAtSaleRate = 0;
+  let vesUsdNominal = 0;
+  let usdCollected = 0;
+  const paymentMethodsMap = new Map();
+
+  const recordPaymentEntry = (m, sign, rate) => {
+    if (!m) return;
+    const rawName = (m.name || 'Otro').toString().trim();
+    if (!rawName) return;
+    const isVes = isVesCurrency(m);
+    const curCode = (typeof m.currency === 'string' ? m.currency : m.currency?.code) || (isVes ? 'VES' : 'USD');
+    const amtUsd = Number(m.amountUSD || 0);
+    const amtVes = Number(m.amountVES || 0);
+    if (amtUsd === 0 && amtVes === 0) return;
+
+    const pmEntry = paymentMethodsMap.get(rawName) || {
+      name: rawName,
+      currency: curCode,
+      isVes,
+      inUSD: 0,
+      outUSD: 0,
+      totalUSD: 0,
+      inVES: 0,
+      outVES: 0,
+      totalVES: 0,
+      txCount: 0,
+      returnCount: 0
+    };
+
+    if (sign > 0) {
+      pmEntry.inUSD += amtUsd;
+      if (isVes) pmEntry.inVES += amtVes;
+      pmEntry.txCount += 1;
+    } else {
+      pmEntry.outUSD += amtUsd;
+      if (isVes) pmEntry.outVES += amtVes;
+      pmEntry.returnCount += 1;
+    }
+    pmEntry.totalUSD = pmEntry.inUSD - pmEntry.outUSD;
+    pmEntry.totalVES = isVes ? (pmEntry.inVES - pmEntry.outVES) : 0;
+    paymentMethodsMap.set(rawName, pmEntry);
+
+    if (isVes) {
+      vesCollected += sign * amtVes;
+      vesUsdNominal += sign * amtUsd;
+      const effectiveRate = rate > 0 ? rate : tasaBcvActual;
+      vesUsdAtSaleRate += sign * (effectiveRate > 0 && amtVes > 0 ? (amtVes / effectiveRate) : amtUsd);
+    } else {
+      usdCollected += sign * amtUsd;
+    }
+  };
+
+  const channelsMap = new Map();
   const dailyMap = new Map();
-  // Top Productos y Categorías
   const productMap = new Map();
   const categoryMap = new Map();
+  const groups = {
+    SUPERIOR: { usd: 0, units: 0 },
+    INFERIOR: { usd: 0, units: 0 },
+    CONJUNTO: { usd: 0, units: 0 },
+    OTRO: { usd: 0, units: 0 }
+  };
 
-  const superiorKeywords = ['SWEATER', 'FRANELA', 'CAMISA', 'CHAQUETA', 'BLUSA', 'TOP', 'JACKET', 'HOODIE', 'T-SHIRT', 'POLO'];
-  const inferiorKeywords = ['PANTALON', 'JEAN', 'SHORT', 'BERMUDA', 'SKIRT', 'FALDA', 'JOGGER', 'LEGGING'];
+  for (const doc of validDocs) {
+    const docUsd = Number(doc.totalPriceUSD || 0);
+    const docMerchandise = Number(doc.subtotal || 0) - Number(doc.discount || 0);
+    const docDelivery = Number(doc.extraCharges || 0);
+    const docUtility = Number(doc.utility || 0);
+    const isCollab = docUsd === 0 && docMerchandise === 0;
 
-  for (const doc of docs) {
-    const chName = doc.saleChannelName || 'Tienda';
-    const chCurr = channelsMap.get(chName) || { name: chName, totalUsd: 0, totalUnits: 0, orderCount: 0 };
-    chCurr.totalUsd += Number(doc.totalPriceUSD || 0);
+    totalAmount += docUsd;
+    productSales += docMerchandise;
+    extraCharges += docDelivery;
+    if (docDelivery > 0) deliveryOrdersCount += 1;
+    totalUtility += docUtility;
+
+    // 2. Contar prendas reales desde sale.productVariations (sin bolsas, cajas, correcciones ni accesorios comodín)
+    let docGarments = 0;
+    const productVariations = Array.isArray(doc.sale?.productVariations) ? doc.sale.productVariations : [];
+    for (const pv of productVariations) {
+      const pName = (pv.product?.name || pv.name || 'Prenda').toString().trim();
+      const pCategory = (pv.product?.category || 'GENERAL').toString().toUpperCase().trim();
+      const amount = Number(pv.amount || 1);
+      const lineUsd = Number(pv.sellingPrice || 0) * amount;
+
+      const group = classifyGarment(pCategory, pName);
+      if (!group) {
+        nonGarmentSalesUsd += lineUsd;
+        continue; // empaque o accesorio comodín (su ingreso/costo ya está en subtotal y utility de la factura)
+      }
+
+      docGarments += amount;
+      groups[group].usd += lineUsd;
+      groups[group].units += amount;
+
+      // Excluir colaboraciones en $0 del ranking de "Más Vendidas" para no mostrar prendas con $0 USD vendidos
+      if (!isCollab) {
+        const pKey = pName.toLowerCase();
+        const pEntry = productMap.get(pKey) || { name: pName, category: pCategory, group, units: 0, totalUsd: 0 };
+        pEntry.units += amount;
+        pEntry.totalUsd += lineUsd;
+        productMap.set(pKey, pEntry);
+
+        const cEntry = categoryMap.get(pCategory) || { category: pCategory, group, units: 0, totalUsd: 0 };
+        cEntry.units += amount;
+        cEntry.totalUsd += lineUsd;
+        categoryMap.set(pCategory, cEntry);
+      }
+    }
+    totalGarments += docGarments;
+
+    if (isCollab) {
+      collabDocsCount += 1;
+      collabUnitsCount += docGarments;
+      if (docUtility < 0) collabCostUsd += Math.abs(docUtility);
+    }
+
+    // Canales de venta (con desglose de mercancía vs delivery)
+    const chName = doc.saleChannelName || doc.sale?.salesChannel?.name || 'Tienda';
+    const chCurr = channelsMap.get(chName) || {
+      name: chName,
+      totalUsd: 0,
+      merchandiseUsd: 0,
+      deliveryUsd: 0,
+      totalUnits: 0,
+      orderCount: 0,
+      paidOrderCount: 0,
+      collabOrderCount: 0
+    };
+    chCurr.totalUsd += docUsd;
+    chCurr.merchandiseUsd += docMerchandise;
+    chCurr.deliveryUsd += docDelivery;
+    chCurr.totalUnits += docGarments;
     chCurr.orderCount += 1;
+    if (isCollab) chCurr.collabOrderCount += 1;
+    else chCurr.paidOrderCount += 1;
     channelsMap.set(chName, chCurr);
 
-    totalUtility += Number(doc.utility || 0);
-
-    // Agrupamiento por fecha (YYYY-MM-DD)
-    const rawDate = doc.createdAt || doc.updatedAt;
-    if (rawDate) {
-      const dayKey = rawDate.split('T')[0];
-      const dayCurr = dailyMap.get(dayKey) || { date: dayKey, totalUsd: 0, totalUnits: 0, orderCount: 0 };
-      dayCurr.totalUsd += Number(doc.totalPriceUSD || 0);
+    // 3. Agrupación diaria en hora de Venezuela
+    const dayKey = toVeDateKey(doc.createdAt || doc.updatedAt);
+    if (dayKey) {
+      const dayCurr = dailyMap.get(dayKey) || {
+        date: dayKey,
+        totalUsd: 0,
+        merchandiseUsd: 0,
+        deliveryUsd: 0,
+        totalUnits: 0,
+        orderCount: 0,
+        paidOrderCount: 0,
+        collabOrderCount: 0
+      };
+      dayCurr.totalUsd += docUsd;
+      dayCurr.merchandiseUsd += docMerchandise;
+      dayCurr.deliveryUsd += docDelivery;
+      dayCurr.totalUnits += docGarments;
       dayCurr.orderCount += 1;
-
-      const prods = Array.isArray(doc.locationProducts) ? doc.locationProducts : [];
-      const prodCountInDoc = prods.reduce((a, b) => a + Number(b.amount || 1), 0);
-      dayCurr.totalUnits += prodCountInDoc;
-      chCurr.totalUnits += prodCountInDoc;
-      
+      if (isCollab) dayCurr.collabOrderCount += 1;
+      else dayCurr.paidOrderCount += 1;
       dailyMap.set(dayKey, dayCurr);
     }
 
-    // Variantes y productos en la venta
-    const productVariations = doc.sale?.productVariations || [];
-    for (const pv of productVariations) {
-      const pName = pv.product?.name || 'Prenda';
-      const pCategory = (pv.product?.category || 'GENERAL').toUpperCase();
-      const pSellingPrice = Number(pv.sellingPrice || 0);
-      const pAmount = Number(pv.amount || 1);
-      const pTotalUsd = pSellingPrice * pAmount;
-
-      const catNorm = pCategory + ' ' + pName.toUpperCase();
-      const isSuperior = superiorKeywords.some(kw => catNorm.includes(kw));
-      const isInferior = inferiorKeywords.some(kw => catNorm.includes(kw));
-
-      if (isSuperior) {
-        superiorSalesUsd += pTotalUsd;
-        superiorUnits += pAmount;
-      } else if (isInferior) {
-        inferiorSalesUsd += pTotalUsd;
-        inferiorUnits += pAmount;
-      } else {
-        superiorSalesUsd += pTotalUsd * 0.6;
-        inferiorSalesUsd += pTotalUsd * 0.4;
-        superiorUnits += Math.round(pAmount * 0.6);
-        inferiorUnits += Math.round(pAmount * 0.4);
-      }
-
-      const pEntry = productMap.get(pName) || { name: pName, category: pCategory, units: 0, totalUsd: 0 };
-      pEntry.units += pAmount;
-      pEntry.totalUsd += pTotalUsd;
-      productMap.set(pName, pEntry);
-
-      const cEntry = categoryMap.get(pCategory) || { category: pCategory, units: 0, totalUsd: 0 };
-      cEntry.units += pAmount;
-      cEntry.totalUsd += pTotalUsd;
-      categoryMap.set(pCategory, cEntry);
+    // 4. Cuadre exacto de métodos de pago (incluyendo pagos iniciales, vueltos y pagos en facturas editadas / cambios de prenda)
+    const saleRate = Number(doc.exchangeRate || 0) || tasaBcvActual;
+    for (const pm of (doc.paymentMethods || [])) recordPaymentEntry(pm, +1, saleRate);
+    for (const rm of (doc.returnMethods || [])) recordPaymentEntry(rm, -1, saleRate);
+    for (const rp of (doc.repayMethods || [])) {
+      const rpRate = Number(rp.exchangeRate || 0) || saleRate;
+      for (const pm of (rp.paymentMethods || [])) recordPaymentEntry(pm, +1, rpRate);
+      for (const rm of (rp.returnMethods || [])) recordPaymentEntry(rm, -1, rpRate);
     }
   }
 
-  const dailyList = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  const activeDaysCount = dailyList.length || 1;
-  const dailyAvgUsd = totalAmount / activeDaysCount;
-  const dailyAvgUnits = totalQuantity / activeDaysCount;
+  const totalDocs = validDocs.length;
+  const paidDocsCount = Math.max(0, totalDocs - collabDocsCount);
+  const paidGarmentsCount = Math.max(0, totalGarments - collabUnitsCount);
+
+  // Ticket promedio calculado sobre ventas cobradas (y versión sobre total de documentos)
+  const avgTicketUsd = paidDocsCount > 0 ? totalAmount / paidDocsCount : (totalDocs > 0 ? totalAmount / totalDocs : 0);
+  const avgMerchandiseTicketUsd = paidDocsCount > 0 ? productSales / paidDocsCount : (totalDocs > 0 ? productSales / totalDocs : 0);
+  const avgItemsPerTicket = paidDocsCount > 0 ? paidGarmentsCount / paidDocsCount : (totalDocs > 0 ? totalGarments / totalDocs : 0);
+  const utilityMarginPct = productSales > 0 ? (totalUtility / productSales) * 100 : 0;
+
+  // Pérdida cambiaria: lo que valen esos Bs netos a tasa Binance vs a tasa BCV de cada venta
+  const exchangeLossUsd = gapRatio > 1 && vesUsdAtSaleRate > 0 ? vesUsdAtSaleRate * (1 - 1 / gapRatio) : 0;
+  const netRealUsd = Math.max(0, totalAmount - exchangeLossUsd);
+  const realUtilityAfterExchangeUsd = totalUtility - exchangeLossUsd;
+
+  // Media diaria (en USD y en Cantidad de Ventas Día a Día)
+  const todayVeKey = toVeDateKey(new Date().toISOString());
+  const dailyListChrono = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const activeDaysCount = dailyListChrono.length;
+
+  // Si el período incluye hoy y hay días previos cerrados, calcular la media sobre los días cerrados para que la mañana en curso no distorsione la media
+  const completedDays = dailyListChrono.filter(d => d.date !== todayVeKey);
+  const baseDays = completedDays.length > 0 ? completedDays : dailyListChrono;
+  const baseDaysCount = baseDays.length;
+
+  const dailyAvgUsd = baseDaysCount > 0 ? baseDays.reduce((a, d) => a + d.totalUsd, 0) / baseDaysCount : 0;
+  const dailyAvgMerchandiseUsd = baseDaysCount > 0 ? baseDays.reduce((a, d) => a + d.merchandiseUsd, 0) / baseDaysCount : 0;
+  const dailyAvgOrders = baseDaysCount > 0 ? baseDays.reduce((a, d) => a + d.orderCount, 0) / baseDaysCount : 0;
+  const dailyAvgUnits = baseDaysCount > 0 ? baseDays.reduce((a, d) => a + d.totalUnits, 0) / baseDaysCount : 0;
 
   let daysAboveAvg = 0;
   let daysBelowAvg = 0;
   let daysInAvg = 0;
 
-  const dailyListWithStatus = dailyList.map(day => {
+  let ordersDaysAboveAvg = 0;
+  let ordersDaysBelowAvg = 0;
+  let ordersDaysInAvg = 0;
+
+  const dailyListWithStatus = dailyListChrono.map(day => {
+    const isToday = day.date === todayVeKey;
+    const isPartialToday = isToday && completedDays.length > 0;
+
+    // Estado según Facturación USD
     let status = 'AVG';
     if (day.totalUsd >= dailyAvgUsd * 1.15) {
       status = 'HIGH';
       daysAboveAvg++;
+    } else if (isPartialToday && day.totalUsd <= dailyAvgUsd * 0.85) {
+      status = 'IN_PROGRESS';
     } else if (day.totalUsd <= dailyAvgUsd * 0.85) {
       status = 'LOW';
       daysBelowAvg++;
     } else {
       daysInAvg++;
     }
+
+    // Estado según Cantidad de Ventas Día a Día
+    let ordersStatus = 'AVG';
+    if (day.orderCount >= dailyAvgOrders * 1.15) {
+      ordersStatus = 'HIGH';
+      ordersDaysAboveAvg++;
+    } else if (isPartialToday && day.orderCount <= dailyAvgOrders * 0.85) {
+      ordersStatus = 'IN_PROGRESS';
+    } else if (day.orderCount <= dailyAvgOrders * 0.85) {
+      ordersStatus = 'LOW';
+      ordersDaysBelowAvg++;
+    } else {
+      ordersDaysInAvg++;
+    }
+
     return {
       ...day,
-      avgUsd: Math.round(dailyAvgUsd * 100) / 100,
+      isToday,
+      totalUsd: r2(day.totalUsd),
+      merchandiseUsd: r2(day.merchandiseUsd),
+      deliveryUsd: r2(day.deliveryUsd),
+      avgUsd: r2(dailyAvgUsd),
+      avgOrders: Math.round(dailyAvgOrders * 10) / 10,
       status,
-      itemsPerTicket: day.orderCount > 0 ? Math.round((day.totalUnits / day.orderCount) * 10) / 10 : 0
+      ordersStatus,
+      avgTicketDayUsd: day.paidOrderCount > 0 ? r2(day.totalUsd / day.paidOrderCount) : 0,
+      itemsPerTicket: day.orderCount > 0 ? Math.round((day.totalUnits / day.orderCount) * 100) / 100 : 0
     };
-  });
+  }).sort((a, b) => b.date.localeCompare(a.date)); // Ordenar del más reciente al más antiguo
 
-  let stockSuperiorUnits = 0;
-  let stockInferiorUnits = 0;
-
+  // Balance de stock en almacén (excluyendo bolsas, cajas, correcciones y accesorios comodín)
+  const stock = { SUPERIOR: 0, INFERIOR: 0, CONJUNTO: 0, OTRO: 0 };
   if (Array.isArray(catalog)) {
     for (const model of catalog) {
-      const mName = (model.nombre || '').toUpperCase();
-      const mCat = (model.categoria || '').toUpperCase();
-      const mText = mCat + ' ' + mName;
-      const mStock = Number(model.total_stock || 0);
-
-      const isSup = superiorKeywords.some(kw => mText.includes(kw));
-      const isInf = inferiorKeywords.some(kw => mText.includes(kw));
-
-      if (isSup) stockSuperiorUnits += mStock;
-      else if (isInf) stockInferiorUnits += mStock;
-      else {
-        stockSuperiorUnits += Math.round(mStock * 0.5);
-        stockInferiorUnits += Math.round(mStock * 0.5);
-      }
+      const group = classifyGarment(model.categoria, model.nombre);
+      if (!group) continue;
+      stock[group] += Math.max(0, Number(model.total_stock || 0));
     }
   }
+  const stockTotalUnits = stock.SUPERIOR + stock.INFERIOR + stock.CONJUNTO + stock.OTRO;
 
-  const stockTotalUnits = stockSuperiorUnits + stockInferiorUnits;
+  const garmentSalesUsd = groups.SUPERIOR.usd + groups.INFERIOR.usd + groups.CONJUNTO.usd + groups.OTRO.usd;
+
+  // Métodos de pago: cuadre exacto calculado desde las facturas (entradas + cambios - vueltos)
+  const paymentMethodsDetailed = Array.from(paymentMethodsMap.values())
+    .map(pm => ({
+      name: pm.name,
+      currency: pm.currency,
+      isVes: pm.isVes,
+      txCount: pm.txCount,
+      returnCount: pm.returnCount,
+      inUSD: r2(pm.inUSD),
+      outUSD: r2(pm.outUSD),
+      totalUSD: r2(pm.totalUSD),
+      inVES: pm.isVes ? r2(pm.inVES) : 0,
+      outVES: pm.isVes ? r2(pm.outVES) : 0,
+      totalVES: pm.isVes ? r2(pm.totalVES) : 0,
+      percentageUsd: pct1(pm.totalUSD, totalAmount)
+    }))
+    .sort((a, b) => b.totalUSD - a.totalUSD);
 
   return {
     summary: {
-      totalAmountUsd: totalAmount,
-      totalQuantityUnits: totalQuantity,
+      totalAmountUsd: r2(totalAmount),
+      productSalesUsd: r2(productSales),
+      garmentSalesUsd: r2(garmentSalesUsd),
+      nonGarmentSalesUsd: r2(nonGarmentSalesUsd),
+      extraChargesUsd: r2(extraCharges),
+      deliveryOrdersCount,
+      totalQuantityUnits: totalGarments,
+      paidQuantityUnits: paidGarmentsCount,
       totalDocsCount: totalDocs,
-      totalCobradoUsd: totalCobrado,
-      avgTicketUsd: Math.round(avgTicketUsd * 100) / 100,
-      avgItemsPerTicket: Math.round(avgItemsPerTicket * 10) / 10,
-      totalUtilityUsd: Math.round(totalUtility * 100) / 100,
-      exchangeLossUsd: Math.round(exchangeLossUsd * 100) / 100,
-      repositionBudgetUsd: Math.max(0, Math.round((totalAmount - exchangeLossUsd) * 100) / 100)
+      paidDocsCount,
+      collabDocsCount,
+      collabUnitsCount,
+      collabCostUsd: r2(collabCostUsd),
+      annulledDocsCount: annulledDocs.length,
+      annulledAmountUsd: r2(annulledDocs.reduce((a, d) => a + Number(d.totalPriceUSD || 0), 0)),
+      totalCobradoUsd: r2(meta.totalCobrado ?? totalAmount),
+      avgTicketUsd: r2(avgTicketUsd),
+      avgMerchandiseTicketUsd: r2(avgMerchandiseTicketUsd),
+      avgItemsPerTicket: Math.round(avgItemsPerTicket * 100) / 100,
+      totalUtilityUsd: r2(totalUtility),
+      utilityMarginPct: Math.round(utilityMarginPct * 10) / 10,
+      realUtilityAfterExchangeUsd: r2(realUtilityAfterExchangeUsd),
+      vesCollectedTotal: r2(vesCollected),
+      vesUsdAtSaleRate: r2(vesUsdAtSaleRate),
+      vesUsdNominalTotal: r2(vesUsdNominal),
+      usdCollectedTotal: r2(usdCollected),
+      exchangeGapPct: Math.round((gapRatio - 1) * 1000) / 10,
+      exchangeLossUsd: r2(exchangeLossUsd),
+      netRealUsd: r2(netRealUsd),
+      repositionBudgetUsd: r2(netRealUsd) // compatibilidad con versiones anteriores del frontend
     },
     daily: {
       daysCount: activeDaysCount,
-      dailyAvgUsd: Math.round(dailyAvgUsd * 100) / 100,
+      completedDaysCount: baseDaysCount,
+      dailyAvgUsd: r2(dailyAvgUsd),
+      dailyAvgMerchandiseUsd: r2(dailyAvgMerchandiseUsd),
+      dailyAvgOrders: Math.round(dailyAvgOrders * 10) / 10,
       dailyAvgUnits: Math.round(dailyAvgUnits * 10) / 10,
       daysAboveAvg,
       daysBelowAvg,
       daysInAvg,
+      ordersDaysAboveAvg,
+      ordersDaysBelowAvg,
+      ordersDaysInAvg,
       list: dailyListWithStatus
     },
-    channels: Array.from(channelsMap.values()).map(c => ({
-      ...c,
-      percentageUsd: totalAmount > 0 ? Math.round((c.totalUsd / totalAmount) * 1000) / 10 : 0
-    })),
+    channels: Array.from(channelsMap.values())
+      .map(c => ({
+        ...c,
+        totalUsd: r2(c.totalUsd),
+        merchandiseUsd: r2(c.merchandiseUsd),
+        deliveryUsd: r2(c.deliveryUsd),
+        percentageUsd: pct1(c.totalUsd, totalAmount)
+      }))
+      .sort((a, b) => b.totalUsd - a.totalUsd),
     superiorVsInferiorSales: {
-      superiorUsd: Math.round(superiorSalesUsd * 100) / 100,
-      superiorUnits,
-      superiorPercentage: (superiorSalesUsd + inferiorSalesUsd) > 0 ? Math.round((superiorSalesUsd / (superiorSalesUsd + inferiorSalesUsd)) * 1000) / 10 : 50,
-      inferiorUsd: Math.round(inferiorSalesUsd * 100) / 100,
-      inferiorUnits,
-      inferiorPercentage: (superiorSalesUsd + inferiorSalesUsd) > 0 ? Math.round((inferiorSalesUsd / (superiorSalesUsd + inferiorSalesUsd)) * 1000) / 10 : 50
+      superiorUsd: r2(groups.SUPERIOR.usd),
+      superiorUnits: groups.SUPERIOR.units,
+      superiorPercentage: pct1(groups.SUPERIOR.usd, garmentSalesUsd),
+      inferiorUsd: r2(groups.INFERIOR.usd),
+      inferiorUnits: groups.INFERIOR.units,
+      inferiorPercentage: pct1(groups.INFERIOR.usd, garmentSalesUsd),
+      conjuntoUsd: r2(groups.CONJUNTO.usd),
+      conjuntoUnits: groups.CONJUNTO.units,
+      conjuntoPercentage: pct1(groups.CONJUNTO.usd, garmentSalesUsd),
+      otrosUsd: r2(groups.OTRO.usd),
+      otrosUnits: groups.OTRO.units,
+      otrosPercentage: pct1(groups.OTRO.usd, garmentSalesUsd)
     },
     stockBalance: {
-      stockSuperiorUnits,
-      stockInferiorUnits,
+      stockSuperiorUnits: stock.SUPERIOR,
+      stockInferiorUnits: stock.INFERIOR,
+      stockConjuntoUnits: stock.CONJUNTO,
+      stockOtrosUnits: stock.OTRO,
       stockTotalUnits,
-      superiorStockPercentage: stockTotalUnits > 0 ? Math.round((stockSuperiorUnits / stockTotalUnits) * 1000) / 10 : 50,
-      inferiorStockPercentage: stockTotalUnits > 0 ? Math.round((stockInferiorUnits / stockTotalUnits) * 1000) / 10 : 50
+      superiorStockPercentage: pct1(stock.SUPERIOR, stockTotalUnits),
+      inferiorStockPercentage: pct1(stock.INFERIOR, stockTotalUnits),
+      conjuntoStockPercentage: pct1(stock.CONJUNTO, stockTotalUnits),
+      otrosStockPercentage: pct1(stock.OTRO, stockTotalUnits),
+      // Proporción inferior vs superior (sin conjuntos), usada para la sugerencia de reposición
+      inferiorVsSuperiorPercentage: pct1(stock.INFERIOR, stock.SUPERIOR + stock.INFERIOR)
     },
     paymentMethods: paymentMethodsDetailed,
-    topProducts: Array.from(productMap.values()).sort((a, b) => b.units - a.units).slice(0, 10),
-    topCategories: Array.from(categoryMap.values()).sort((a, b) => b.totalUsd - a.totalUsd)
+    topProducts: Array.from(productMap.values())
+      .map(p => ({ ...p, totalUsd: r2(p.totalUsd) }))
+      .sort((a, b) => b.units - a.units || b.totalUsd - a.totalUsd)
+      .slice(0, 10),
+    topCategories: Array.from(categoryMap.values())
+      .map(c => ({ ...c, totalUsd: r2(c.totalUsd) }))
+      .sort((a, b) => b.totalUsd - a.totalUsd),
+    dataQuality: billsResult?.dataQuality || null
   };
 }
 
