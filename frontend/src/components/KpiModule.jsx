@@ -81,7 +81,13 @@ export default function KpiModule({ bcvRate }) {
   const [compareType, setCompareType] = useState('previous_period'); // 'previous_period' | 'previous_year'
 
   // Pestañas Internas del Módulo KPI
-  const [subTab, setSubTab] = useState('resumen'); // 'resumen' | 'canales' | 'finanzas' | 'almacen'
+  const [subTab, setSubTab] = useState('resumen'); // 'resumen' | 'canales' | 'finanzas' | 'almacen' | 'rotacion'
+
+  // Estados de filtro para la Pestaña de Rotación & Efectividad de Compras
+  const [expandedCohortId, setExpandedCohortId] = useState(null);
+  const [rotationFilter, setRotationFilter] = useState('ALL'); // 'ALL' | 'STAR' | 'DEAD_STOCK' | 'SLOW' | 'HIGH_COST' | 'SOLD_OUT'
+  const [rotationCategoryFilter, setRotationCategoryFilter] = useState('ALL');
+  const [rotationSearch, setRotationSearch] = useState('');
 
   // Datos de API
   const [loading, setLoading] = useState(false);
@@ -276,12 +282,13 @@ export default function KpiModule({ bcvRate }) {
             <span className="font-black text-white text-xs whitespace-nowrap">KPIs Live</span>
           </div>
 
-          <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-2xl border border-slate-800/80 shrink-0">
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-2xl border border-slate-800/80 overflow-x-auto no-scrollbar max-w-full">
             {[
               { id: 'resumen', label: '🎯 Resumen' },
               { id: 'canales', label: '📊 Canales' },
               { id: 'finanzas', label: '💱 Finanzas' },
-              { id: 'almacen', label: '📦 Almacén' }
+              { id: 'almacen', label: '📦 Almacén' },
+              { id: 'rotacion', label: '🔄 Rotación & Compras' }
             ].map((st) => (
               <button
                 key={st.id}
@@ -1054,6 +1061,587 @@ export default function KpiModule({ bcvRate }) {
 
           </div>
         )}
+
+        {/* ===================================================================
+            PESTAÑA 5: 🔄 ROTACIÓN POR FECHA DE INGRESO & EFECTIVIDAD DE COMPRAS (80/20)
+            =================================================================== */}
+        {subTab === 'rotacion' && (() => {
+          const rot = kpiData?.rotation || {};
+          const gs = rot.globalSummary || {};
+          const cohorts = rot.purchaseCohorts || [];
+          const catMatrix = rot.categorySelectionMatrix || [];
+          const allProducts = rot.products || [];
+
+          const availableCategories = ['ALL', ...Array.from(new Set(allProducts.map(p => p.category))).sort()];
+
+          // Filtrar y ordenar productos para el explorador individual de rotación
+          let filteredProducts = allProducts.filter(p => {
+            if (rotationCategoryFilter !== 'ALL' && p.category !== rotationCategoryFilter) return false;
+            if (rotationSearch.trim()) {
+              const q = rotationSearch.toLowerCase().trim();
+              if (!p.name.toLowerCase().includes(q) && !p.category.toLowerCase().includes(q) && !p.entryDate.includes(q)) {
+                return false;
+              }
+            }
+            if (rotationFilter === 'STAR') return p.status === 'STAR';
+            if (rotationFilter === 'DEAD_STOCK') return p.status === 'DEAD_STOCK';
+            if (rotationFilter === 'SLOW') return p.status === 'SLOW';
+            if (rotationFilter === 'SOLD_OUT') return p.status === 'SOLD_OUT';
+            if (rotationFilter === 'HIGH_COST') return p.currentStock > 0;
+            return true;
+          });
+
+          if (rotationFilter === 'STAR') {
+            filteredProducts.sort((a, b) => b.velocityPerDay - a.velocityPerDay || b.effectivenessPct - a.effectivenessPct);
+          } else if (rotationFilter === 'DEAD_STOCK' || rotationFilter === 'SLOW') {
+            filteredProducts.sort((a, b) => b.remainingCostUsd - a.remainingCostUsd || a.effectivenessPct - b.effectivenessPct);
+          } else if (rotationFilter === 'HIGH_COST') {
+            filteredProducts.sort((a, b) => b.remainingCostUsd - a.remainingCostUsd);
+          } else {
+            filteredProducts.sort((a, b) => b.velocityPerDay - a.velocityPerDay || b.effectivenessPct - a.effectivenessPct);
+          }
+
+          return (
+            <div className="space-y-4">
+
+              {/* 1. RESUMEN EJECUTIVO DE EFECTIVIDAD DE COMPRA Y META 80/20 */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                      <TrendingUp className="w-4 h-4 text-amber-400" />
+                      <span>Salud Global de Compras & Regla 80/20 (Máx. 20% Merma / Dead Stock)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Mide qué porcentaje de todas las prendas compradas ya se vendió desde su fecha de ingreso al ERP y cuánto capital sigue en percha.
+                    </p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[11px] font-extrabold border shrink-0 self-start sm:self-auto ${
+                    (gs.matureDeadStockPct || 0) <= 20
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                      : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                  }`}>
+                    {(gs.matureDeadStockPct || 0) <= 20
+                      ? `🟢 Compras Maduras en Meta (${gs.matureDeadStockPct || 0}% ≤ 20% máx)`
+                      : `🔴 Merma en Compras Maduras: ${gs.matureDeadStockPct || 0}% (Meta ≤ 20%)`}
+                  </span>
+                </div>
+
+                {/* Tarjetas Principales de Efectividad y Capital */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Efectividad Global */}
+                  <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/30 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-emerald-400 block">
+                      % Efectividad Global (Sell-Through)
+                    </span>
+                    <div className="text-2xl font-black font-mono text-white">
+                      {gs.globalEffectivenessPct || 0}%
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      <strong className="text-emerald-400">{gs.totalSoldUnits || 0} vendidas</strong> de {gs.totalInitialUnits || 0} compradas
+                    </p>
+                  </div>
+
+                  {/* % Stock Restante / Merma */}
+                  <div className={`bg-slate-950 p-3.5 rounded-2xl border space-y-1 ${
+                    (gs.globalRemainingPct || 0) <= 20 ? 'border-emerald-500/30' : 'border-amber-500/30'
+                  }`}>
+                    <span className="text-[10px] font-bold uppercase text-amber-400 block">
+                      % Stock por Evacuar (Meta ≤ 20%)
+                    </span>
+                    <div className="text-2xl font-black font-mono text-amber-300">
+                      {gs.globalRemainingPct || 0}%
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      <strong className="text-white">{gs.totalCurrentStock || 0} prendas</strong> hoy en almacén
+                    </p>
+                  </div>
+
+                  {/* Dead Stock Crítico (+45d / Sin Rotación) */}
+                  <div className="bg-slate-950 p-3.5 rounded-2xl border border-rose-500/30 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-rose-400 block">
+                      🧊 Dead Stock Crítico (+45 días)
+                    </span>
+                    <div className="text-2xl font-black font-mono text-rose-400">
+                      {gs.deadStockOverInitialPct || 0}% <span className="text-xs font-normal text-rose-300">del total comprado</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      {gs.deadStockUnitsTotal || 0} unds ({gs.deadStockModelsCount || 0} mod.) • Costo: <strong className="text-rose-300">${(gs.deadStockCostUsd || 0).toFixed(2)}</strong>
+                    </p>
+                  </div>
+
+                  {/* Capital Inmovilizado vs Recuperación */}
+                  <div className="bg-slate-950 p-3.5 rounded-2xl border border-sky-500/30 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-sky-400 block">
+                      💰 Capital en Stock vs Recuperado
+                    </span>
+                    <div className="text-xl font-black font-mono text-sky-300">
+                      ${(gs.totalRemainingCostUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-[10px] text-slate-400 font-normal">costo actual</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      PVP en percha: <strong className="text-white">${(gs.totalRemainingRetailUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> • ROI: <strong className="text-emerald-400">{gs.globalCostRecoveryPct || 0}%</strong>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Barra Visual de Efectividad vs Regla del 80/20 */}
+                <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
+                  <div className="flex flex-wrap items-center justify-between text-[11px] gap-1">
+                    <span className="font-bold text-slate-300">
+                      Progreso Global de Evacuación de Compras ({gs.globalEffectivenessPct || 0}% vendido vs 80% meta ideal)
+                    </span>
+                    <span className="font-mono text-slate-400">
+                      Compras maduras (+45d): <strong className="text-emerald-400">{gs.matureEffectivenessPct || 0}% efectividad</strong> ({gs.matureDeadStockPct || 0}% sin vender)
+                    </span>
+                  </div>
+                  <div className="relative h-3.5 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800 flex">
+                    <div
+                      style={{ width: `${Math.min(100, gs.globalEffectivenessPct || 0)}%` }}
+                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all"
+                      title={`Vendido: ${gs.globalEffectivenessPct || 0}%`}
+                    />
+                    <div
+                      style={{ width: `${Math.max(0, 100 - (gs.globalEffectivenessPct || 0))}%` }}
+                      className="bg-amber-500/40 h-full"
+                      title={`Stock restante: ${gs.globalRemainingPct || 0}%`}
+                    />
+                    {/* Línea guía en el 80% */}
+                    <div
+                      style={{ left: '80%' }}
+                      className="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_6px_#fff]"
+                      title="Meta 80% Efectividad (Máx 20% Dead Stock)"
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>0%</span>
+                    <span className="text-amber-300 font-bold">⬆ Meta 80% Efectividad (Máx. 20% Stock Restante)</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. AUDITORÍA POR LOTES DE COMPRA (AGRUPADOS POR FECHA DE INGRESO AL INVENTARIO) */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                      <Calendar className="w-4 h-4 text-amber-400" />
+                      <span>Efectividad por Lote de Compra (Agrupado por Fecha de Ingreso)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Cada bloque agrupa las prendas que entraron juntas en una misma compra. Toca cualquier compra para ver qué categorías y prendas funcionaron o se estancaron.
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400 shrink-0">
+                    {cohorts.length} compras detectadas
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {cohorts.map((cohort) => {
+                    const isExpanded = expandedCohortId === cohort.id;
+                    let badgeStyle = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+                    let badgeText = '🟢 Meta Cumplida (≤20% Merma)';
+                    if (cohort.status === 'IN_MATURATION') {
+                      badgeStyle = 'bg-sky-500/15 text-sky-300 border-sky-500/30';
+                      badgeText = `🔵 En Ciclo (${cohort.daysSinceEntry}d • Proy. 45d: ${cohort.projectedEffectiveness45d}%)`;
+                    } else if (cohort.status === 'WARNING_SLOW') {
+                      badgeStyle = 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+                      badgeText = `🟡 Por Empujar (${cohort.deadStockPct}% restante)`;
+                    } else if (cohort.status === 'ALERT_DEAD_STOCK') {
+                      badgeStyle = 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+                      badgeText = `🔴 Exceso Dead Stock (${cohort.deadStockPct}% > 20%)`;
+                    }
+
+                    return (
+                      <div
+                        key={cohort.id}
+                        className="bg-slate-950 border border-slate-800/90 rounded-2xl overflow-hidden transition-all"
+                      >
+                        {/* Cabecera clickeable de la Compra */}
+                        <div
+                          onClick={() => setExpandedCohortId(isExpanded ? null : cohort.id)}
+                          className="p-3.5 sm:p-4 cursor-pointer hover:bg-slate-900/60 transition-colors space-y-2.5"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-start sm:items-center space-x-2.5">
+                              <ChevronRight className={`w-4 h-4 text-amber-400 mt-0.5 sm:mt-0 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-extrabold text-white text-xs sm:text-sm">
+                                    Compra #{cohort.cohortNumber}: {cohort.startDate === cohort.endDate ? formatVeDayLabel(cohort.startDate) : `${formatVeDayLabel(cohort.startDate)} al ${formatVeDayLabel(cohort.endDate)}`}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
+                                    {cohort.startDate} • Hace {cohort.daysSinceEntry} días
+                                  </span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>
+                                    {badgeText}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-400 mt-1 font-mono">
+                                  {cohort.modelsCount} modelos • Lote inicial: <strong className="text-white">{cohort.initialUnits} unds</strong> → Vendidas: <strong className="text-emerald-400">{cohort.soldUnits} unds</strong> ({cohort.periodSoldUnits} en este período) → Quedan: <strong className="text-amber-300">{cohort.currentStock} unds</strong>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Métricas Derecha */}
+                            <div className="flex items-center space-x-4 sm:text-right pl-6 sm:pl-0 shrink-0">
+                              <div>
+                                <span className="text-[10px] text-slate-400 uppercase block">Efectividad</span>
+                                <span className={`text-base sm:text-lg font-black font-mono ${
+                                  cohort.effectivenessPct >= 80 ? 'text-emerald-400' : cohort.effectivenessPct >= 60 ? 'text-amber-300' : 'text-rose-400'
+                                }`}>
+                                  {cohort.effectivenessPct}%
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-400 uppercase block">Restante</span>
+                                <span className={`text-base sm:text-lg font-black font-mono ${
+                                  cohort.deadStockPct <= 20 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}>
+                                  {cohort.deadStockPct}%
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-400 uppercase block">Ritmo</span>
+                                <span className="text-xs sm:text-sm font-bold font-mono text-sky-300">
+                                  {cohort.velocityPerDay}/día
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Barra de progreso 80/20 del Lote */}
+                          <div className="space-y-1 pl-6">
+                            <div className="relative h-2 w-full bg-slate-900 rounded-full overflow-hidden flex">
+                              <div
+                                style={{ width: `${Math.min(100, cohort.effectivenessPct)}%` }}
+                                className={`h-full ${
+                                  cohort.effectivenessPct >= 80 ? 'bg-emerald-400' : cohort.effectivenessPct >= 60 ? 'bg-amber-400' : 'bg-rose-500'
+                                }`}
+                              />
+                              <div
+                                style={{ left: '80%' }}
+                                className="absolute top-0 bottom-0 w-0.5 bg-white"
+                              />
+                            </div>
+                            <div className="flex flex-wrap justify-between text-[10px] font-mono text-slate-400 gap-1">
+                              <span>
+                                Costo Compra: <strong className="text-slate-200">${cohort.initialCostUsd.toFixed(2)}</strong> • Ya Cobrado: <strong className="text-emerald-400">${cohort.revenueUsd.toFixed(2)}</strong> ({cohort.costRecoveryPct}% recuperado)
+                              </span>
+                              <span>
+                                Costo aún en percha: <strong className="text-amber-300">${cohort.remainingCostUsd.toFixed(2)}</strong>
+                                {cohort.excessDeadStockUnits > 0 && cohort.daysSinceEntry >= 45 && (
+                                  <span className="text-rose-400"> • Sobran {cohort.excessDeadStockUnits} unds (${cohort.excessDeadStockCostUsd.toFixed(2)}) sobre el 20% máx</span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Detalle Expandible de la Compra: Mix de Categorías y Modelos del Lote */}
+                        {isExpanded && (
+                          <div className="border-t border-slate-800 bg-slate-900/50 p-3.5 sm:p-4 space-y-3 animate-fade-in">
+                            {/* Mix de categorías en esta compra */}
+                            <div>
+                              <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-amber-400 mb-2">
+                                📊 Rendimiento por Categoría dentro de esta Compra:
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {(cohort.categoriesBreakdown || []).map((cb, cIdx) => (
+                                  <div key={cIdx} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                                    <div>
+                                      <div className="font-extrabold text-white flex items-center space-x-1.5">
+                                        <span>{cb.category}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono">({cb.shareOfCohortUnitsPct}% del lote)</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-mono">
+                                        {cb.soldUnits} vend. / {cb.initialUnits} comp. • Quedan {cb.currentStock}
+                                      </div>
+                                    </div>
+                                    <div className="text-right font-mono">
+                                      <div className={`font-black ${cb.effectivenessPct >= 80 ? 'text-emerald-400' : cb.effectivenessPct >= 60 ? 'text-amber-300' : 'text-rose-400'}`}>
+                                        {cb.effectivenessPct}% efect.
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        Merma: {cb.deadStockPct}%
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Lista de modelos de esta compra */}
+                            <div>
+                              <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400 mb-2">
+                                👕 Prendas de esta Compra (Ordenadas de Mayor a Menor Efectividad):
+                              </h4>
+                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 no-scrollbar">
+                                {(cohort.models || []).map((m, mIdx) => (
+                                  <div key={mIdx} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1.5">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 uppercase">
+                                        {m.category}
+                                      </span>
+                                      <span className="font-bold text-white">{m.name}</span>
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        ({m.daysSinceLastSale === 0 ? 'Vendió hoy' : m.lastSaleDate ? `Últ. venta hace ${m.daysSinceLastSale}d` : 'Sin ventas aún'})
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center space-x-3 font-mono text-[11px] self-end sm:self-auto">
+                                      <span className="text-slate-300">
+                                        <strong className="text-emerald-400">{m.soldUnits}</strong>/{m.initialUnits} vend. (Stock: <strong className="text-amber-300">{m.currentStock}</strong>)
+                                      </span>
+                                      <span className="text-sky-300">{m.velocityPerDay}/día</span>
+                                      <span className={`font-black px-2 py-0.5 rounded-lg ${
+                                        m.effectivenessPct >= 80
+                                          ? 'bg-emerald-500/15 text-emerald-300'
+                                          : m.effectivenessPct >= 60
+                                            ? 'bg-amber-500/15 text-amber-300'
+                                            : 'bg-rose-500/15 text-rose-300'
+                                      }`}>
+                                        {m.effectivenessPct}% efect.
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. MATRIZ DE AJUSTE DE SELECCIÓN POR CATEGORÍA (¿QUÉ COMPRAR MÁS Y QUÉ COMPRAR MENOS?) */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+                <div>
+                  <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                    <Layers className="w-4 h-4 text-amber-400" />
+                    <span>Matriz de Selección de Compra por Categoría (Guía para Futuras Compras)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Compara cuánto volumen destinaste a cada categoría en las compras vs cuánto rota realmente, para saber qué categorías potenciar y cuáles recortar para no pasar del 20% de dead stock.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {catMatrix.map((cat, idx) => {
+                    let recBadge = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+                    let recIcon = '🚀 Priorizar / Comprar Más';
+                    if (cat.recommendation === 'BALANCED') {
+                      recBadge = 'bg-sky-500/15 text-sky-300 border-sky-500/30';
+                      recIcon = '✅ Selección Equilibrada';
+                    } else if (cat.recommendation === 'BUY_LESS') {
+                      recBadge = 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+                      recIcon = '⚠️ Reducir / Ajustar Selección';
+                    }
+
+                    return (
+                      <div key={idx} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="font-black text-white text-sm">{cat.category}</span>
+                            <span className="text-[10px] text-slate-400 font-mono ml-2">({cat.modelsCount} modelos)</span>
+                          </div>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${recBadge}`}>
+                            {recIcon}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-[11px] font-mono bg-slate-900/70 p-2 rounded-xl border border-slate-800/80">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">% de tu Compra</span>
+                            <strong className="text-white">{cat.shareOfPurchasePct}%</strong>
+                            <span className="text-[10px] text-slate-500 block">{cat.initialUnits} unds</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">% de tu Venta</span>
+                            <strong className="text-emerald-400">{cat.shareOfSalesPct}%</strong>
+                            <span className="text-[10px] text-slate-500 block">{cat.soldUnits} unds</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Efectividad / Merma</span>
+                            <strong className={cat.effectivenessPct >= 75 ? 'text-emerald-400' : cat.effectivenessPct >= 55 ? 'text-amber-300' : 'text-rose-400'}>
+                              {cat.effectivenessPct}%
+                            </strong>
+                            <span className="text-[10px] text-slate-400 block">Resta: {cat.deadStockPct}%</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                          <span>
+                            Stock actual: <strong className="text-amber-300">{cat.currentStock} unds</strong> (Costo: ${cat.remainingCostUsd.toFixed(2)})
+                          </span>
+                          <span>
+                            Recuperación Costo: <strong className="text-emerald-400">{cat.costRecoveryPct}%</strong>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. EXPLORADOR DE ROTACIÓN INDIVIDUAL POR PRENDA DESDE SU INGRESO */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                      <Package className="w-4 h-4 text-amber-400" />
+                      <span>Rotación por Prenda desde su Fecha de Ingreso ({filteredProducts.length} modelos)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Velocidad diaria/semanal, días en inventario, días sin vender, cobertura y capital retenido por prenda.
+                    </p>
+                  </div>
+
+                  {/* Buscador rápido */}
+                  <input
+                    type="text"
+                    value={rotationSearch}
+                    onChange={(e) => setRotationSearch(e.target.value)}
+                    placeholder="Buscar prenda o fecha (ej. azzaro, 2026-09)..."
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 sm:w-64"
+                  />
+                </div>
+
+                {/* Botones de Filtro por Semáforo de Rotación */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'ALL', label: `📦 Todas (${allProducts.length})` },
+                    { id: 'STAR', label: `🔥 Alta Rotación (${gs.starModelsCount || 0})` },
+                    { id: 'DEAD_STOCK', label: `🧊 Dead Stock / Estancadas (${gs.deadStockModelsCount || 0})` },
+                    { id: 'SLOW', label: `⚠️ Rotación Lenta (${gs.slowModelsCount || 0})` },
+                    { id: 'HIGH_COST', label: '💰 Mayor Capital en Percha' },
+                    { id: 'SOLD_OUT', label: `🏁 Agotadas 100% (${gs.soldOutModelsCount || 0})` }
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setRotationFilter(f.id)}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                        rotationFilter === f.id
+                          ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm'
+                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+
+                  {/* Selector de Categoría */}
+                  <select
+                    value={rotationCategoryFilter}
+                    onChange={(e) => setRotationCategoryFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] font-bold text-slate-200 focus:outline-none focus:border-amber-400 ml-auto"
+                  >
+                    {availableCategories.map(cat => (
+                      <option key={cat} value={cat}>
+                        {cat === 'ALL' ? 'Categoría: Todas' : cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Lista de Prendas con Métricas de Rotación */}
+                <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1 no-scrollbar">
+                  {filteredProducts.map((p, idx) => {
+                    let statusBadge = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+                    let statusLabel = '✅ Saludable';
+                    if (p.status === 'STAR') {
+                      statusBadge = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                      statusLabel = '🔥 Estrella / Alta Rotación';
+                    } else if (p.status === 'DEAD_STOCK') {
+                      statusBadge = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+                      statusLabel = '🧊 Dead Stock / Estancado';
+                    } else if (p.status === 'SLOW') {
+                      statusBadge = 'bg-orange-500/20 text-orange-300 border-orange-500/40';
+                      statusLabel = '⚠️ Rotación Lenta';
+                    } else if (p.status === 'SOLD_OUT') {
+                      statusBadge = 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+                      statusLabel = '🏁 Agotado 100%';
+                    }
+
+                    return (
+                      <div key={p.id || idx} className="bg-slate-950 p-3 rounded-2xl border border-slate-800/90 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                          <div className="space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                                {p.category}
+                              </span>
+                              <span className="font-extrabold text-white text-xs sm:text-sm">{p.name}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadge}`}>
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              📥 Ingresó: <strong className="text-slate-200">{p.entryDate}</strong> ({p.daysInInventory} días en tienda)
+                              {' • '}
+                              {p.lastSaleDate
+                                ? `🕒 Última venta: ${p.lastSaleDate} (hace ${p.daysSinceLastSale}d)`
+                                : '⚠️ Sin ventas registradas'}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-3 font-mono text-xs sm:text-right shrink-0">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block">Efectividad</span>
+                              <strong className={p.effectivenessPct >= 80 ? 'text-emerald-400' : p.effectivenessPct >= 60 ? 'text-amber-300' : 'text-rose-400'}>
+                                {p.effectivenessPct}%
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block">Velocidad</span>
+                              <strong className="text-sky-300">{p.velocityPerDay}/d</strong>
+                              <span className="text-[10px] text-slate-500 block">({p.velocityPerWeek}/sem)</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block">Cobertura</span>
+                              <strong className="text-white">
+                                {p.currentStock === 0 ? '0d' : p.daysOfSupply >= 999 ? '∞' : `~${p.daysOfSupply}d`}
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono bg-slate-900/60 p-2 rounded-xl border border-slate-800/70">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Lote Inicial → Vendidas</span>
+                            <strong className="text-white">{p.initialUnits}</strong> → <strong className="text-emerald-400">{p.soldUnits} vend.</strong>
+                            {p.periodSoldUnits > 0 && (
+                              <span className="text-[10px] text-amber-300 block">({p.periodSoldUnits} en el período)</span>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Stock Actual Restante</span>
+                            <strong className={p.remainingPct <= 20 ? 'text-emerald-400' : 'text-amber-300'}>
+                              {p.currentStock} unds ({p.remainingPct}%)
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Capital Retenido (Costo / PVP)</span>
+                            <strong className="text-rose-300">${p.remainingCostUsd.toFixed(2)}</strong>
+                            <span className="text-slate-400"> / ${p.remainingRetailUsd.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Facturado Histórico (ROI)</span>
+                            <strong className="text-emerald-400">${p.revenueUsd.toFixed(2)}</strong>
+                            <span className="text-slate-400"> ({p.costRecoveryPct}%)</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+          );
+        })()}
 
       </div>
 

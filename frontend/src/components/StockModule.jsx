@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Search, X, Package, CheckCircle2 } from 'lucide-react';
-import { filterCatalog, tokenizeQuery, normalizeStr, SYNONYMS_MAP, COLOR_CANONICAL_SET } from '../utils/searchEngine';
+import { filterCatalog, tokenizeQuery, normalizeStr, COLOR_CANONICAL_SET, doesColorGroupMatch } from '../utils/searchEngine';
 
 export default function StockModule({ stockData, bcvRate, searchTerm, setSearchTerm, isLoading, onAddToCart, ticketItems = [], onOpenTicket }) {
   const inputRef = useRef(null);
@@ -21,7 +21,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
   const totalTicketUsd = ticketItems.reduce((acc, i) => acc + (i.precio_usd * i.cant), 0);
   const totalTicketCount = ticketItems.reduce((acc, i) => acc + i.cant, 0);
 
-  const sizeRegex = /^(xs|s|m|l|xl|xxl|2xl|3xl|4xl|[0-9]{2})$/i;
+  const sizeRegex = /^(xs|s|m|l|xl|xxl|2xl|3xl|4xl|unica|[0-9]{2})$/i;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-3 sm:p-4 space-y-3.5 max-w-lg mx-auto w-full">
@@ -155,14 +155,10 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
                     const sizeTokens = activeTokens.filter(token => sizeRegex.test(token));
                     const hasSizeToken = sizeTokens.length > 0;
 
-                    // Filtrar colores por token de color especificado
+                    // Filtrar colores por token de color especificado (incluyendo colores inferidos en nombre como "jean black")
                     let displayColores = item.colores || [];
                     if (hasColorToken) {
-                      displayColores = displayColores.filter(c => {
-                        const normC = normalizeStr(c.color);
-                        const canonC = SYNONYMS_MAP[normC] || normC;
-                        return colorTokens.some(t => normC.includes(t) || canonC.includes(t));
-                      });
+                      displayColores = displayColores.filter(c => doesColorGroupMatch(item, c, colorTokens));
                     }
 
                     // Si se buscó una talla específica (ej: "s"), mostrar ÚNICAMENTE los grupos de color que tengan esa talla DISPONIBLE (stock > 0)
@@ -186,9 +182,7 @@ export default function StockModule({ stockData, bcvRate, searchTerm, setSearchT
 
                         {displayColores.length > 0 ? (
                           displayColores.map((colorGroup) => {
-                            const normColor = normalizeStr(colorGroup.color);
-                            const canonColor = SYNONYMS_MAP[normColor] || normColor;
-                            const isColorMatched = hasColorToken && colorTokens.some(t => normColor.includes(t) || canonColor.includes(t));
+                            const isColorMatched = hasColorToken && doesColorGroupMatch(item, colorGroup, colorTokens);
 
                             let visibleTallas = colorGroup.tallas || [];
                             if (hasSizeToken) {

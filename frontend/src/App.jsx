@@ -65,22 +65,13 @@ export default function App() {
 
   const totalTicketCount = ticketItems.reduce((acc, i) => acc + i.cant, 0);
 
-  // Carga instantánea (0ms) desde cache local al abrir la PWA
+  // Carga instantánea (0ms) desde cache local al abrir la PWA (el filtrado lo aplica StockModule con filterCatalog)
   const [stockData, setStockData] = useState(() => {
     try {
       const cached = localStorage.getItem('vk_stock_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
-        const lastSearch = localStorage.getItem('vk_last_search');
-        if (lastSearch) {
-          const q = lastSearch.toLowerCase();
-          return parsed.filter(m => 
-            (m.nombre && m.nombre.toLowerCase().includes(q)) || 
-            (m.id && m.id.toLowerCase().includes(q)) || 
-            (m.categoria && m.categoria.toLowerCase().includes(q))
-          );
-        }
-        return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.warn('[App] Error al leer vk_stock_cache inicial:', e);
@@ -189,18 +180,18 @@ export default function App() {
     return false;
   };
 
-  // Cargar inventario filtrado
-  const fetchStock = useCallback(async (query = '') => {
+  // Cargar catálogo completo de inventario (el filtrado avanzado por tokens ocurre en 0ms en StockModule)
+  const fetchStock = useCallback(async () => {
     if (!stockData || stockData.length === 0) {
       setIsLoadingStock(true);
     }
     
-    const workerUrl = `https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock?q=${encodeURIComponent(query)}`;
+    const workerUrl = `https://microapp-vk-bff.jjhernandezz100.workers.dev/api/stock`;
     
     try {
       let res = await fetch(workerUrl);
       if (!res.ok) {
-        res = await fetch(`/api/stock?q=${encodeURIComponent(query)}`);
+        res = await fetch(`/api/stock`);
       }
 
       if (res.ok) {
@@ -209,10 +200,7 @@ export default function App() {
         setLastSync(json.last_sync || null);
         
         setTimeout(() => autoVerifyLowStockModels(json.data || []), 50);
-
-        if (!query) {
-          localStorage.setItem('vk_stock_cache', JSON.stringify(json.data || []));
-        }
+        localStorage.setItem('vk_stock_cache', JSON.stringify(json.data || []));
       } else {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -221,15 +209,7 @@ export default function App() {
       const cachedStock = localStorage.getItem('vk_stock_cache');
       if (cachedStock) {
         const parsed = JSON.parse(cachedStock);
-        if (query) {
-          const q = query.toLowerCase();
-          const filtered = parsed.filter(m => 
-            (m.nombre && m.nombre.toLowerCase().includes(q)) || 
-            (m.id && m.id.toLowerCase().includes(q)) || 
-            (m.categoria && m.categoria.toLowerCase().includes(q))
-          );
-          setStockData(filtered);
-        } else {
+        if (Array.isArray(parsed)) {
           setStockData(parsed);
         }
       }
@@ -275,16 +255,8 @@ export default function App() {
 
   useEffect(() => {
     fetchBcvRate();
-    fetchStock('');
+    fetchStock();
   }, [fetchBcvRate, fetchStock]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchStock(searchTerm);
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm, fetchStock]);
 
   const handleRefresh = async () => {
     setIsSyncing(true);
@@ -297,17 +269,7 @@ export default function App() {
       if (res.ok) {
         const json = await res.json();
         if (json.data && Array.isArray(json.data) && json.data.length > 0) {
-          if (searchTerm) {
-            const q = searchTerm.toLowerCase();
-            const filtered = json.data.filter(m => 
-              (m.nombre && m.nombre.toLowerCase().includes(q)) || 
-              (m.id && m.id.toLowerCase().includes(q)) || 
-              (m.categoria && m.categoria.toLowerCase().includes(q))
-            );
-            setStockData(filtered);
-          } else {
-            setStockData(json.data);
-          }
+          setStockData(json.data);
           localStorage.setItem('vk_stock_cache', JSON.stringify(json.data));
         }
         if (json.bcv) {
@@ -318,11 +280,11 @@ export default function App() {
           setLastSync(json.last_sync);
         }
       } else {
-        await Promise.all([fetchBcvRate(true), fetchStock(searchTerm)]);
+        await Promise.all([fetchBcvRate(true), fetchStock()]);
       }
     } catch (err) {
       console.warn('[App] Error al forzar sincronización manual en vivo:', err);
-      await Promise.all([fetchBcvRate(true), fetchStock(searchTerm)]);
+      await Promise.all([fetchBcvRate(true), fetchStock()]);
     } finally {
       setIsSyncing(false);
     }

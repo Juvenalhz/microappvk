@@ -449,6 +449,27 @@ function parseFinapartnerItem(item, channelMap = new Map(), priceMap = new Map()
     });
   }
 
+  // Extraer fecha de ingreso al inventario (entryDate / createdAt), última actualización y costo unitario
+  const batches = Array.isArray(item.batchs) ? item.batchs : [];
+  let entryDate = item.createdAt || null;
+  let lastUpdate = item.updatedAt || null;
+  let costoUnitario = 0;
+
+  for (const b of batches) {
+    if (b.entryDate && (!entryDate || b.entryDate < entryDate)) {
+      entryDate = b.entryDate;
+    }
+    if (b.lastUpdate && (!lastUpdate || b.lastUpdate > lastUpdate)) {
+      lastUpdate = b.lastUpdate;
+    }
+    if (costoUnitario === 0 && Number(b.unitPrice) > 0) {
+      costoUnitario = Number(b.unitPrice);
+    }
+  }
+  if (costoUnitario === 0 && Number(item.amount) > 0 && Number(item.totalPrice) > 0) {
+    costoUnitario = Math.round((Number(item.totalPrice) / Number(item.amount)) * 100) / 100;
+  }
+
   return {
     id: modelId,
     erp_product_id: posProductId || item._id || item.id || item.productId || null,
@@ -456,6 +477,9 @@ function parseFinapartnerItem(item, channelMap = new Map(), priceMap = new Map()
     nombre,
     categoria,
     precio_usd: precioUsd,
+    costo_unitario: costoUnitario,
+    entry_date: entryDate,
+    last_update: lastUpdate,
     imagen_url: item.imageUrl || item.image || null,
     colores,
     variantes: flatVariantes, // compatibilidad hacia atras
@@ -481,6 +505,15 @@ function aggregateProductModels(parsedItems) {
       }
       if (!existing.alt_product_id && item.alt_product_id) {
         existing.alt_product_id = item.alt_product_id;
+      }
+      if (item.costo_unitario > 0 && !existing.costo_unitario) {
+        existing.costo_unitario = item.costo_unitario;
+      }
+      if (item.entry_date && (!existing.entry_date || item.entry_date < existing.entry_date)) {
+        existing.entry_date = item.entry_date;
+      }
+      if (item.last_update && (!existing.last_update || item.last_update > existing.last_update)) {
+        existing.last_update = item.last_update;
       }
       const colorMap = new Map();
 
@@ -818,56 +851,217 @@ async function handleGetStock(url, env) {
     lastSync = new Date().toISOString();
   }
 
-  // Synonyms map para búsqueda avanzada en Worker API
+  const COLOR_CANONICAL_SET = new Set([
+    'blanco', 'negro', 'gris', 'azul', 'rojo', 'verde', 'marron',
+    'beige', 'crema', 'khaki', 'caramelo', 'terracota', 'mostaza',
+    'amarillo', 'naranja', 'rosado', 'morado', 'vinotinto',
+    'claro', 'oscuro'
+  ]);
+
+  const GARMENT_FAMILY_SET = new Set([
+    'tshirt', 'camisa', 'sobrecamisa', 'chemise', 'sweater', 'hoodie',
+    'chaqueta', 'pantalon', 'jean', 'jogger', 'cargo', 'short',
+    'bermuda', 'set', 'zapato', 'gorra', 'gorro', 'chaleco'
+  ]);
+
+  // Diccionario de sinónimos estricto por familias de prenda
   const SYNONYMS_MAP = {
-    'camisa': 'camisa', 'camisas': 'camisa', 'chemise': 'camisa', 'chemises': 'camisa', 'sobrecamisa': 'camisa', 'sobrecamisas': 'camisa', 'shirt': 'camisa', 'shirts': 'camisa',
-    'tshirt': 'franela', 't-shirt': 'franela', 'remera': 'franela', 'playera': 'franela', 'franela': 'franela', 'franelas': 'franela',
-    'pantalon': 'pantalon', 'pantalones': 'pantalon', 'jean': 'pantalon', 'jeans': 'pantalon', 'denim': 'pantalon', 'pants': 'pantalon',
-    'chaqueta': 'chaqueta', 'chaquetas': 'chaqueta', 'sueter': 'chaqueta', 'hoodie': 'chaqueta', 'abrigo': 'chaqueta',
-    'mono': 'mono', 'monos': 'mono', 'jogger': 'mono', 'short': 'short', 'shorts': 'short',
+    'tshirt': 'tshirt', 't-shirt': 'tshirt', 'tshirts': 'tshirt', 't-shirts': 'tshirt',
+    'franela': 'tshirt', 'franelas': 'tshirt', 'camiseta': 'tshirt', 'camisetas': 'tshirt',
+    'remera': 'tshirt', 'remeras': 'tshirt', 'playera': 'tshirt', 'playeras': 'tshirt',
+    'tee': 'tshirt', 'tees': 'tshirt', 'tank': 'tshirt',
+
+    'camisa': 'camisa', 'camisas': 'camisa', 'shirt': 'camisa', 'shirts': 'camisa',
+    'guayabera': 'camisa', 'guayaberas': 'camisa', 'blusa': 'camisa', 'blusas': 'camisa',
+
+    'sobrecamisa': 'sobrecamisa', 'sobrecamisas': 'sobrecamisa', 'overshirt': 'sobrecamisa',
+
+    'chemise': 'chemise', 'chemises': 'chemise', 'chemis': 'chemise', 'polo': 'chemise', 'polos': 'chemise',
+
+    'sweater': 'sweater', 'sweaters': 'sweater', 'sueter': 'sweater', 'sueteres': 'sweater',
+    'sudadera': 'sweater', 'sudaderas': 'sweater', 'pullover': 'sweater', 'buzo': 'sweater', 'buso': 'sweater',
+
+    'hoodie': 'hoodie', 'hoodies': 'hoodie', 'hoddie': 'hoodie', 'capucha': 'hoodie',
+
+    'chaqueta': 'chaqueta', 'chaquetas': 'chaqueta', 'jacket': 'chaqueta', 'jackets': 'chaqueta',
+    'abrigo': 'chaqueta', 'abrigos': 'chaqueta',
+
+    'pantalon': 'pantalon', 'pantalones': 'pantalon', 'pant': 'pantalon', 'pants': 'pantalon',
+    'trouser': 'pantalon', 'trousers': 'pantalon', 'chino': 'pantalon', 'chinos': 'pantalon',
+
+    'jean': 'jean', 'jeans': 'jean', 'denim': 'jean', 'vaquero': 'jean', 'vaqueros': 'jean',
+
+    'jogger': 'jogger', 'joggers': 'jogger', 'mono': 'jogger', 'monos': 'jogger',
+    'cargo': 'cargo', 'cargos': 'cargo',
+    'short': 'short', 'shorts': 'short',
+    'bermuda': 'bermuda', 'bermudas': 'bermuda', 'pescador': 'bermuda', 'pescadores': 'bermuda',
+    'set': 'set', 'sets': 'set', 'conjunto': 'set', 'conjuntos': 'set', 'outfit': 'set', 'outfits': 'set',
+
+    'zapato': 'zapato', 'zapatos': 'zapato', 'calzado': 'zapato', 'tenis': 'zapato', 'sneaker': 'zapato', 'sneakers': 'zapato',
+    'gorra': 'gorra', 'gorras': 'gorra', 'cap': 'gorra', 'caps': 'gorra',
+    'gorro': 'gorro', 'gorros': 'gorro', 'beanie': 'gorro',
+    'chaleco': 'chaleco', 'chalecos': 'chaleco',
+
+    'glof': 'golf', 'recto': 'straight',
+
     'blanca': 'blanco', 'blancas': 'blanco', 'blanco': 'blanco', 'blancos': 'blanco', 'white': 'blanco',
     'negra': 'negro', 'negras': 'negro', 'negro': 'negro', 'negros': 'negro', 'black': 'negro',
-    'marron': 'marron', 'marrón': 'marron', 'marrones': 'marron', 'brown': 'marron', 'cafe': 'marron',
-    'azul': 'azul', 'azules': 'azul', 'blue': 'azul', 'marino': 'azul', 'celeste': 'azul',
+    'gris': 'gris', 'grises': 'gris', 'gray': 'gris', 'grey': 'gris', 'plata': 'gris', 'silver': 'gris', 'girs': 'gris',
+    'azul': 'azul', 'azules': 'azul', 'blue': 'azul', 'marino': 'azul', 'navy': 'azul', 'celeste': 'azul',
     'roja': 'rojo', 'rojas': 'rojo', 'rojo': 'rojo', 'rojos': 'rojo', 'red': 'rojo',
-    'verde': 'verde', 'verdes': 'verde', 'green': 'verde', 'oliva': 'verde',
-    'gris': 'gris', 'grises': 'gris', 'gray': 'gris', 'grey': 'gris', 'plata': 'gris',
-    'rosada': 'rosado', 'rosadas': 'rosado', 'rosado': 'rosado', 'rosados': 'rosado', 'pink': 'rosado', 'rosa': 'rosado',
-    'amarilla': 'amarillo', 'amarillas': 'amarillo', 'amarillo': 'amarillo', 'yellow': 'amarillo', 'mostaza': 'amarillo',
-    'morada': 'morado', 'morado': 'morado', 'purple': 'morado', 'violeta': 'morado',
-    'vinotinto': 'vinotinto', 'vino': 'vinotinto', 'naranja': 'naranja', 'fucsia': 'fucsia', 'beige': 'beige'
+    'verde': 'verde', 'verdes': 'verde', 'green': 'verde', 'oliva': 'verde', 'olive': 'verde',
+    'marron': 'marron', 'marrones': 'marron', 'brown': 'marron', 'cafe': 'marron', 'chocolate': 'marron', 'tabaco': 'marron',
+    'beige': 'beige', 'beig': 'beige',
+    'crema': 'crema', 'cream': 'crema', 'marfil': 'crema', 'hueso': 'crema',
+    'khaki': 'khaki', 'caqui': 'khaki', 'kaki': 'khaki',
+    'caramel': 'caramelo', 'caramelo': 'caramelo', 'camel': 'caramelo',
+    'terracota': 'terracota', 'ladrillo': 'terracota',
+    'mostaza': 'mostaza', 'mustard': 'mostaza',
+    'amarilla': 'amarillo', 'amarillas': 'amarillo', 'amarillo': 'amarillo', 'amarillos': 'amarillo', 'yellow': 'amarillo', 'dorado': 'amarillo',
+    'naranja': 'naranja', 'naranjas': 'naranja', 'orange': 'naranja', 'coral': 'naranja',
+    'rosada': 'rosado', 'rosadas': 'rosado', 'rosado': 'rosado', 'rosados': 'rosado', 'pink': 'rosado', 'rosa': 'rosado', 'fucsia': 'rosado', 'fuchsia': 'rosado',
+    'morada': 'morado', 'moradas': 'morado', 'morado': 'morado', 'morados': 'morado', 'purple': 'morado', 'violeta': 'morado', 'lila': 'morado',
+    'vinotinto': 'vinotinto', 'vino': 'vinotinto', 'burgundy': 'vinotinto', 'burdeos': 'vinotinto',
+    'clara': 'claro', 'claro': 'claro', 'claros': 'claro', 'claras': 'claro', 'light': 'claro',
+    'oscura': 'oscuro', 'oscuro': 'oscuro', 'oscuros': 'oscuro', 'oscuras': 'oscuro', 'dark': 'oscuro'
   };
 
-  const stopWords = new Set(['dame', 'todas', 'todos', 'las', 'los', 'les', 'de', 'del', 'el', 'la', 'un', 'una', 'unos', 'unas', 'en', 'con', 'para', 'por', 'o', 'y']);
+  const stopWords = new Set([
+    'dame', 'todas', 'todos', 'las', 'los', 'les', 'de', 'del',
+    'el', 'la', 'un', 'una', 'unos', 'unas', 'en', 'con', 'para',
+    'por', 'o', 'y', 'talla', 'color'
+  ]);
+
+  const getItemFamilies = (item) => {
+    const families = new Set();
+    const cat = normalizeText(item.categoria);
+    const name = normalizeText(item.nombre);
+    const spaceWords = name.split(/\s+/).filter(Boolean);
+    const allWords = name.split(/[\s\-_\/,()+]+/).filter(Boolean);
+
+    if (cat === 't-shirt' || cat === 'tshirt' || cat === 'franela') families.add('tshirt');
+    else if (cat === 'camisa') families.add('camisa');
+    else if (cat === 'chemise') families.add('chemise');
+    else if (cat === 'sweater') families.add('sweater');
+    else if (cat === 'hoodie') families.add('hoodie');
+    else if (cat === 'chaqueta') families.add('chaqueta');
+    else if (cat === 'pantalon' || cat === 'pants') families.add('pantalon');
+    else if (cat === 'jean' || cat === 'jean recto') families.add('jean');
+    else if (cat === 'jogger cargo') { families.add('jogger'); families.add('cargo'); }
+    else if (cat === 'short') families.add('short');
+    else if (cat === 'bermuda') families.add('bermuda');
+    else if (cat === 'set') families.add('set');
+
+    if (spaceWords.includes('t-shirt') || spaceWords.includes('t-shirts') || allWords.includes('tshirt') || allWords.includes('tshirts') || allWords.includes('franela') || allWords.includes('franelas') || allWords.includes('tank')) families.add('tshirt');
+    if (allWords.includes('camisa') || allWords.includes('camisas')) families.add('camisa');
+    if (allWords.includes('sobrecamisa') || allWords.includes('sobrecamisas')) families.add('sobrecamisa');
+    if (allWords.includes('chemise') || allWords.includes('chemises') || allWords.includes('polo') || allWords.includes('polos')) families.add('chemise');
+    if (allWords.includes('sweater') || allWords.includes('sweaters') || allWords.includes('sueter') || allWords.includes('sueteres') || allWords.includes('sudadera') || allWords.includes('sudaderas')) families.add('sweater');
+    if (allWords.includes('hoodie') || allWords.includes('hoodies')) families.add('hoodie');
+    if (allWords.includes('chaqueta') || allWords.includes('chaquetas') || allWords.includes('jacket') || allWords.includes('jackets') || allWords.includes('bomber') || allWords.includes('varsity')) families.add('chaqueta');
+    if (allWords.includes('pantalon') || allWords.includes('pantalones') || allWords.includes('pants') || allWords.includes('pant')) families.add('pantalon');
+    if ((allWords.includes('jean') || allWords.includes('jeans') || allWords.includes('denim')) && !families.has('chaqueta')) families.add('jean');
+    if (allWords.includes('jogger') || allWords.includes('joggers')) families.add('jogger');
+    if (allWords.includes('cargo') || allWords.includes('cargos')) families.add('cargo');
+    if (allWords.includes('short') || allWords.includes('shorts')) families.add('short');
+    if (allWords.includes('bermuda') || allWords.includes('bermudas') || allWords.includes('pescador') || allWords.includes('pescadores')) families.add('bermuda');
+    if (allWords.includes('set') || allWords.includes('sets') || allWords.includes('conjunto') || allWords.includes('conjuntos')) families.add('set');
+    if (allWords.includes('zapato') || allWords.includes('zapatos')) families.add('zapato');
+    if (allWords.includes('gorra') || allWords.includes('gorras')) families.add('gorra');
+    if (allWords.includes('gorro') || allWords.includes('gorros')) families.add('gorro');
+    if (allWords.includes('chaleco') || allWords.includes('chalecos')) families.add('chaleco');
+
+    return families;
+  };
+
+  const doesColorGroupMatch = (item, group, colorTokens) => {
+    if (!colorTokens || colorTokens.length === 0) return true;
+    const colorSet = new Set();
+    const rawGroupColor = normalizeText(group?.color || '');
+    if (rawGroupColor === 'gris-c') { colorSet.add('gris'); colorSet.add('claro'); }
+    else if (rawGroupColor === 'gris-o') { colorSet.add('gris'); colorSet.add('oscuro'); }
+
+    for (const w of rawGroupColor.split(/[\s\/\-_]+/).filter(Boolean)) {
+      const canon = SYNONYMS_MAP[w] || w;
+      if (COLOR_CANONICAL_SET.has(canon)) colorSet.add(canon);
+    }
+    if (colorSet.size === 0 && item?.nombre) {
+      for (const w of normalizeText(item.nombre).split(/[\s\/\-_]+/).filter(Boolean)) {
+        const canon = SYNONYMS_MAP[w] || w;
+        if (COLOR_CANONICAL_SET.has(canon)) colorSet.add(canon);
+      }
+    }
+    if (colorSet.size === 0) return false;
+    return colorTokens.every(ct => colorSet.has(ct));
+  };
 
   // Filtrado search-as-you-type avanzado
   let results = catalog;
   if (normalizedQuery) {
     const rawWords = normalizedQuery.split(/\s+/).filter(Boolean);
-    const tokens = rawWords.filter(w => !stopWords.has(w)).map(w => SYNONYMS_MAP[w] || w);
+    const tokens = [];
+    for (const w of rawWords) {
+      if (stopWords.has(w)) continue;
+      const canon = SYNONYMS_MAP[w] || w;
+      if (!tokens.includes(canon)) tokens.push(canon);
+    }
 
     if (tokens.length > 0) {
+      const sizeRegex = /^(xs|s|m|l|xl|xxl|2xl|3xl|4xl|unica|[0-9]{2})$/i;
+      const colorTokens = [];
+      const sizeTokens = [];
+      const familyTokens = [];
+      const generalTokens = [];
+
+      for (const token of tokens) {
+        if (COLOR_CANONICAL_SET.has(token)) colorTokens.push(token);
+        else if (sizeRegex.test(token)) sizeTokens.push(token);
+        else if (GARMENT_FAMILY_SET.has(token)) familyTokens.push(token);
+        else generalTokens.push(token);
+      }
+
       results = catalog.filter(model => {
         const itemNombre = normalizeText(model.nombre);
         const itemCat = normalizeText(model.categoria);
-        const itemCatCanon = SYNONYMS_MAP[itemCat] || itemCat;
         const itemId = normalizeText(model.id);
-        const itemSearchText = normalizeText(model.search_text);
+        const itemFamilies = getItemFamilies(model);
+        const rawItemWords = `${itemNombre} ${itemCat}`.split(/[\s\-_\/,()+]+/).filter(Boolean);
+        const normalizedItemWords = rawItemWords.map(w => SYNONYMS_MAP[w] || w);
 
-        const itemColores = (model.colores || []).map(c => normalizeText(c.color));
-        const itemTallas = new Set();
-        (model.colores || []).forEach(c => (c.tallas || []).forEach(t => itemTallas.add(normalizeText(t.talla))));
+        for (const fToken of familyTokens) {
+          if (itemFamilies.has(fToken)) continue;
+          if (fToken === 'jean' && familyTokens.includes('chaqueta') && rawItemWords.includes('jean')) continue;
+          return false;
+        }
 
-        return tokens.every(token => {
-          if (itemCat.includes(token) || itemCatCanon.includes(token)) return true;
-          if (itemNombre.includes(token) || itemId.includes(token)) return true;
-          if (itemSearchText.includes(token)) return true;
-          if (itemColores.some(c => c.includes(token) || (SYNONYMS_MAP[c] && SYNONYMS_MAP[c].includes(token)))) return true;
-          if (itemTallas.has(token)) return true;
-          if ((token === 'camisa' || token === 'chemise' || token === 'franela') && 
-              (itemCat.includes('chemise') || itemCat.includes('camisa') || itemCat.includes('franela') || itemCat.includes('set') || itemNombre.includes('camisa') || itemNombre.includes('chemise'))) return true;
+        const matchesGeneral = generalTokens.every(token => {
+          const wordMatch = rawItemWords.some(w => w === token || w.startsWith(token) || (token.length >= 4 && w.includes(token))) ||
+                            normalizedItemWords.some(w => w === token || w.startsWith(token) || (token.length >= 4 && w.includes(token)));
+          if (wordMatch) return true;
+          if (Array.isArray(model.variantes) && model.variantes.some(v => v.sku && normalizeText(v.sku).includes(token))) return true;
+          if ((/\d/.test(token) || token.length >= 6) && itemId.includes(token)) return true;
           return false;
         });
+        if (!matchesGeneral) return false;
+
+        if (colorTokens.length > 0 || sizeTokens.length > 0) {
+          let hasAvailable = false;
+          const colorGroups = Array.isArray(model.colores) ? model.colores : [];
+          for (const group of colorGroups) {
+            if (!doesColorGroupMatch(model, group, colorTokens)) continue;
+            for (const t of (group.tallas || [])) {
+              const tNorm = normalizeText(t.talla);
+              if ((sizeTokens.length === 0 || sizeTokens.includes(tNorm)) && Number(t.stock) > 0) {
+                hasAvailable = true;
+                break;
+              }
+            }
+            if (hasAvailable) break;
+          }
+          if (!hasAvailable) return false;
+        }
+
+        return true;
       });
     }
   }
@@ -1452,7 +1646,7 @@ function getMockErpInventory() {
 const VE_UTC_OFFSET_MS = -4 * 60 * 60 * 1000;
 
 // Límite de páginas por período para no exceder los subrequests del Worker
-const KPI_BILLS_PAGE_SIZE = 100;
+const KPI_BILLS_PAGE_SIZE = 500;
 const KPI_BILLS_MAX_PAGES = 20;
 
 // Productos que NO son prendas físicas para conteo de almacén ni ranking de prendas (su venta y costo sí entran en facturación y utilidad)
@@ -1521,9 +1715,9 @@ function extractBillDocs(res) {
 /**
  * Descarga TODAS las páginas de /pos/bills del período (no solo las primeras 100 facturas)
  */
-async function fetchAllBills(env, fromDate, toDate) {
+async function fetchAllBills(env, fromDate, toDate, customPageSize = KPI_BILLS_PAGE_SIZE) {
   const buildPath = (page) =>
-    `/pos/bills?fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}&search=&currentPage=${page}&pageSize=${KPI_BILLS_PAGE_SIZE}&sortedColumn=updatedAt&sortedDirection=desc`;
+    `/pos/bills?fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}&search=&currentPage=${page}&pageSize=${customPageSize}&sortedColumn=updatedAt&sortedDirection=desc`;
 
   const first = await fetchErp(buildPath(1), env);
   const reportedPages = Math.max(1, Number(first?.totalPages || 1));
@@ -1585,14 +1779,18 @@ async function handleGetKpis(url, env) {
         return null;
       }),
       env.STORE_KV.get('stock_cache').catch(() => null),
-      env.STORE_KV.get('tasa_bcv').catch(() => null)
+      env.STORE_KV.get('tasa_bcv').catch(() => null),
+      getHistoricalSalesSummary(env).catch(e => {
+        console.warn('[KPI Handler] Error al obtener historial acumulado de rotación:', e.message);
+        return null;
+      })
     ];
 
     if (compareFromDate && compareToDate) {
       fetchPromises.push(fetchAllBills(env, compareFromDate, compareToDate).catch(() => null));
     }
 
-    const [billsResult, catalogRaw, bcvDataRaw, compareBillsResult] = await Promise.all(fetchPromises);
+    const [billsResult, catalogRaw, bcvDataRaw, historicalSalesSummary, compareBillsResult] = await Promise.all(fetchPromises);
 
     if (!billsResult) {
       return new Response(
@@ -1601,7 +1799,16 @@ async function handleGetKpis(url, env) {
       );
     }
 
-    const catalog = catalogRaw ? JSON.parse(catalogRaw) : [];
+    let catalog = catalogRaw ? JSON.parse(catalogRaw) : [];
+    // Si la caché de inventario aún no tiene entry_date (fecha de ingreso de cada lote), sincronizar una vez
+    if (catalog.length === 0 || !catalog.some(m => m.entry_date)) {
+      try {
+        catalog = await syncCatalog(env);
+      } catch (e) {
+        console.warn('[KPI Handler] No se pudo refrescar entry_date del catálogo:', e.message);
+      }
+    }
+
     let bcvData = bcvDataRaw ? JSON.parse(bcvDataRaw) : null;
     const isBcvStale = !bcvData || !bcvData.updated_at || (Date.now() - new Date(bcvData.updated_at).getTime() > 30 * 60 * 1000);
     if (isBcvStale) {
@@ -1613,6 +1820,7 @@ async function handleGetKpis(url, env) {
     }
 
     const parsedKpis = processKpiData(billsResult, catalog, bcvData);
+    parsedKpis.rotation = buildRotationAndPurchaseKpis(catalog, historicalSalesSummary, billsResult);
     const comparisonKpis = compareBillsResult ? processKpiData(compareBillsResult, catalog, bcvData) : null;
 
     return new Response(
@@ -2042,6 +2250,559 @@ function processKpiData(billsResult, catalog, bcvData) {
       .map(c => ({ ...c, totalUsd: r2(c.totalUsd) }))
       .sort((a, b) => b.totalUsd - a.totalUsd),
     dataQuality: billsResult?.dataQuality || null
+  };
+}
+
+/**
+ * Obtiene y guarda en caché de KV (15 min) el consolidado histórico de ventas por producto
+ * desde el inicio de operaciones (2025-01-01) usando pageSize=1000 (~3 peticiones HTTP).
+ */
+async function getHistoricalSalesSummary(env, forceRefresh = false) {
+  const CACHE_KEY = 'kpi_historical_sales_v1';
+  if (!forceRefresh) {
+    try {
+      const cachedRaw = await env.STORE_KV.get(CACHE_KEY);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw);
+        if (parsed && parsed.updatedAt && (Date.now() - new Date(parsed.updatedAt).getTime() < 15 * 60 * 1000)) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('[Historical Sales Cache] Error leyendo KV:', e.message);
+    }
+  }
+
+  const allTimeFrom = '2025-01-01T00:00:00.000Z';
+  const allTimeTo = new Date(Date.now() + 86400000).toISOString();
+  const billsResult = await fetchAllBills(env, allTimeFrom, allTimeTo, 1000);
+  const validDocs = (billsResult?.docs || []).filter(d => d && d.deleted !== true);
+
+  const byName = {};
+  const byId = {};
+
+  for (const doc of validDocs) {
+    const docUsd = Number(doc.totalPriceUSD || 0);
+    const docMerchandise = Number(doc.subtotal || 0) - Number(doc.discount || 0);
+    const isCollab = docUsd === 0 && docMerchandise === 0;
+    const saleIso = doc.createdAt || doc.updatedAt || null;
+
+    const pvs = Array.isArray(doc.sale?.productVariations) ? doc.sale.productVariations : [];
+    for (const pv of pvs) {
+      const rawName = (pv.product?.name || pv.name || '').toString().trim();
+      const normName = normalizeText(rawName);
+      if (!normName) continue;
+      const rawId = (pv.product?._id || pv.product?.id || pv.productId || '').toString().toLowerCase().trim();
+      const qty = Number(pv.amount || 1);
+      const lineUsd = isCollab ? 0 : Number(pv.sellingPrice || 0) * qty;
+
+      const updateEntry = (mapObj, key) => {
+        if (!key) return;
+        const curr = mapObj[key] || {
+          soldUnits: 0,
+          paidUnits: 0,
+          collabUnits: 0,
+          revenueUsd: 0,
+          ordersCount: 0,
+          firstSaleDate: null,
+          lastSaleDate: null
+        };
+        curr.soldUnits += qty;
+        if (isCollab) curr.collabUnits += qty;
+        else curr.paidUnits += qty;
+        curr.revenueUsd = r2(curr.revenueUsd + lineUsd);
+        curr.ordersCount += 1;
+        if (saleIso) {
+          if (!curr.firstSaleDate || saleIso < curr.firstSaleDate) curr.firstSaleDate = saleIso;
+          if (!curr.lastSaleDate || saleIso > curr.lastSaleDate) curr.lastSaleDate = saleIso;
+        }
+        mapObj[key] = curr;
+      };
+
+      updateEntry(byName, normName);
+      if (rawId) updateEntry(byId, rawId);
+    }
+  }
+
+  const summary = {
+    updatedAt: new Date().toISOString(),
+    totalBillsProcessed: validDocs.length,
+    byName,
+    byId
+  };
+
+  try {
+    await env.STORE_KV.put(CACHE_KEY, JSON.stringify(summary), { expirationTtl: 900 });
+  } catch (e) {
+    console.warn('[Historical Sales Cache] No se pudo guardar en KV:', e.message);
+  }
+
+  return summary;
+}
+
+/**
+ * Clasifica la categoría comercial real de un producto (especialmente para desglosar la categoría "OC")
+ */
+function resolveCommercialCategory(rawCategory, rawName) {
+  const cat = normUpper(rawCategory);
+  const name = normalizeText(rawName);
+  const words = name.split(/[\s\-_\/,()+]+/).filter(Boolean);
+  const spaceWords = name.split(/\s+/).filter(Boolean);
+
+  if (cat && cat !== 'OC' && cat !== 'GENERAL') {
+    if (cat === 'PANTS') return 'PANTALON';
+    if (cat === 'JEAN RECTO') return 'JEAN';
+    return cat;
+  }
+
+  if (spaceWords.includes('t-shirt') || spaceWords.includes('t-shirts') || words.includes('tshirt') || words.includes('franela') || words.includes('tank')) return 'T-SHIRT';
+  if (words.includes('sobrecamisa') || words.includes('sobrecamisas')) return 'CAMISA';
+  if (words.includes('camisa') || words.includes('camisas')) return 'CAMISA';
+  if (words.includes('chemise') || words.includes('chemises') || words.includes('polo')) return 'CHEMISE';
+  if (words.includes('sweater') || words.includes('sueter') || words.includes('sueteres') || words.includes('sudadera')) return 'SWEATER';
+  if (words.includes('hoodie') || words.includes('hoodies')) return 'HOODIE';
+  if (words.includes('chaqueta') || words.includes('chaquetas') || words.includes('jacket') || words.includes('bomber') || words.includes('varsity') || words.includes('chaleco') || words.includes('chalecos')) return 'CHAQUETA';
+  if (words.includes('jean') || words.includes('jeans')) return 'JEAN';
+  if (words.includes('jogger') || words.includes('joggers') || words.includes('cargo')) return 'JOGGER CARGO';
+  if (words.includes('pantalon') || words.includes('pants')) return 'PANTALON';
+  if (words.includes('short') || words.includes('shorts')) return 'SHORT';
+  if (words.includes('bermuda') || words.includes('bermudas') || words.includes('pescador') || words.includes('pescadores')) return 'BERMUDA';
+  if (words.includes('set') || words.includes('sets') || words.includes('conjunto')) return 'SET';
+  if (words.includes('zapato') || words.includes('zapatos') || words.includes('gorra') || words.includes('gorras') || words.includes('gorro') || words.includes('gorros')) return 'CALZADO / GORRAS';
+
+  return cat || 'OTROS';
+}
+
+/**
+ * Construye los KPIs de Rotación por Producto desde su Fecha de Ingreso y
+ * Auditoría de Efectividad de Compras (Regla 80% Efectividad / Máx 20% Dead Stock)
+ */
+function buildRotationAndPurchaseKpis(catalog, historicalSales, periodBillsResult) {
+  const nowMs = Date.now();
+  const histByName = historicalSales?.byName || {};
+  const histById = historicalSales?.byId || {};
+
+  // Ventas dentro del período seleccionado en el filtro superior
+  const periodByName = {};
+  const periodById = {};
+  const periodDocs = (periodBillsResult?.docs || []).filter(d => d && d.deleted !== true);
+
+  for (const doc of periodDocs) {
+    const docUsd = Number(doc.totalPriceUSD || 0);
+    const docMerchandise = Number(doc.subtotal || 0) - Number(doc.discount || 0);
+    const isCollab = docUsd === 0 && docMerchandise === 0;
+    for (const pv of (doc.sale?.productVariations || [])) {
+      const normName = normalizeText(pv.product?.name || pv.name || '');
+      const rawId = (pv.product?._id || pv.product?.id || pv.productId || '').toString().toLowerCase().trim();
+      const qty = Number(pv.amount || 1);
+      const lineUsd = isCollab ? 0 : Number(pv.sellingPrice || 0) * qty;
+      if (normName) {
+        periodByName[normName] = periodByName[normName] || { units: 0, usd: 0 };
+        periodByName[normName].units += qty;
+        periodByName[normName].usd = r2(periodByName[normName].usd + lineUsd);
+      }
+      if (rawId) {
+        periodById[rawId] = periodById[rawId] || { units: 0, usd: 0 };
+        periodById[rawId].units += qty;
+        periodById[rawId].usd = r2(periodById[rawId].usd + lineUsd);
+      }
+    }
+  }
+
+  const productList = [];
+
+  for (const model of (catalog || [])) {
+    const group = classifyGarment(model.categoria, model.nombre);
+    if (!group) continue; // Excluir bolsas, cajas, correcciones y accesorios comodín
+
+    const normName = normalizeText(model.nombre);
+    const idCandidates = [
+      (model.erp_product_id || '').toString().toLowerCase(),
+      (model.alt_product_id || '').toString().toLowerCase(),
+      (model.id || '').toString().toLowerCase()
+    ].filter(Boolean);
+
+    let hist = histByName[normName] || null;
+    if (!hist) {
+      for (const cid of idCandidates) {
+        if (histById[cid]) {
+          hist = histById[cid];
+          break;
+        }
+      }
+    }
+
+    let per = periodByName[normName] || null;
+    if (!per) {
+      for (const cid of idCandidates) {
+        if (periodById[cid]) {
+          per = periodById[cid];
+          break;
+        }
+      }
+    }
+
+    const currentStock = Math.max(0, Number(model.total_stock || 0));
+    const soldUnits = Number(hist?.soldUnits || 0);
+    const paidUnits = Number(hist?.paidUnits || 0);
+    const collabUnits = Number(hist?.collabUnits || 0);
+    const initialUnits = currentStock + soldUnits;
+
+    // Si un registro antiguo tiene 0 stock actual y 0 ventas históricas, no aporta al análisis
+    if (initialUnits === 0) continue;
+
+    const entryDateIso = model.entry_date || hist?.firstSaleDate || '2025-07-14T12:00:00.000Z';
+    const entryDateKey = toVeDateKey(entryDateIso) || entryDateIso.slice(0, 10);
+    const entryMs = new Date(entryDateIso).getTime() || (nowMs - 30 * 86400000);
+    const daysInInventory = Math.max(1, Math.round((nowMs - entryMs) / 86400000));
+
+    const lastSaleIso = hist?.lastSaleDate || null;
+    const daysSinceLastSale = lastSaleIso
+      ? Math.max(0, Math.round((nowMs - new Date(lastSaleIso).getTime()) / 86400000))
+      : daysInInventory;
+
+    const effectivenessPct = pct1(soldUnits, initialUnits);
+    const remainingPct = r2(Math.max(0, 100 - effectivenessPct));
+    const velocityPerDay = Math.round((soldUnits / daysInInventory) * 100) / 100;
+    const velocityPerWeek = Math.round(velocityPerDay * 7 * 10) / 10;
+    const daysOfSupply = currentStock === 0
+      ? 0
+      : (velocityPerDay > 0 ? Math.min(999, Math.round(currentStock / velocityPerDay)) : 999);
+
+    const priceUsd = r2(model.precio_usd || 0);
+    const unitCostUsd = r2(Number(model.costo_unitario) > 0 ? model.costo_unitario : priceUsd * 0.35);
+    const initialCostUsd = r2(initialUnits * unitCostUsd);
+    const remainingCostUsd = r2(currentStock * unitCostUsd);
+    const remainingRetailUsd = r2(currentStock * priceUsd);
+    const revenueUsd = r2(hist?.revenueUsd || 0);
+    const costRecoveryPct = pct1(revenueUsd, initialCostUsd);
+    const commercialCategory = resolveCommercialCategory(model.categoria, model.nombre);
+
+    let status = 'HEALTHY';
+    if (currentStock === 0) {
+      status = 'SOLD_OUT';
+    } else if (effectivenessPct >= 80 || (daysInInventory <= 30 && effectivenessPct >= 45) || velocityPerDay >= 0.75) {
+      status = 'STAR';
+    } else if ((daysInInventory >= 45 && effectivenessPct < 60) || (daysInInventory >= 35 && daysSinceLastSale >= 21 && effectivenessPct < 70)) {
+      status = 'DEAD_STOCK';
+    } else if (daysInInventory >= 30 && effectivenessPct < 78) {
+      status = 'SLOW';
+    }
+
+    productList.push({
+      id: model.id,
+      name: model.nombre,
+      rawCategory: model.categoria,
+      category: commercialCategory,
+      group,
+      entryDate: entryDateKey,
+      entryDateIso,
+      daysInInventory,
+      lastSaleDate: lastSaleIso ? toVeDateKey(lastSaleIso) : null,
+      daysSinceLastSale,
+      initialUnits,
+      soldUnits,
+      paidUnits,
+      collabUnits,
+      currentStock,
+      periodSoldUnits: Number(per?.units || 0),
+      periodRevenueUsd: r2(per?.usd || 0),
+      effectivenessPct,
+      remainingPct,
+      velocityPerDay,
+      velocityPerWeek,
+      daysOfSupply,
+      unitCostUsd,
+      priceUsd,
+      initialCostUsd,
+      remainingCostUsd,
+      remainingRetailUsd,
+      revenueUsd,
+      costRecoveryPct,
+      status
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 1. AGRUPACIÓN AUTOMÁTICA POR LOTES DE COMPRA (PURCHASE COHORTS)
+  // Prendas con fecha de ingreso cercana (<= 7 días de diferencia) pertenecen a una misma compra
+  // -------------------------------------------------------------------------
+  const sortedByEntry = [...productList].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
+  const rawCohorts = [];
+
+  for (const prod of sortedByEntry) {
+    const prodDayMs = new Date(`${prod.entryDate}T12:00:00Z`).getTime();
+    const lastCohort = rawCohorts[rawCohorts.length - 1];
+
+    if (!lastCohort) {
+      rawCohorts.push({
+        startDate: prod.entryDate,
+        endDate: prod.entryDate,
+        lastDayMs: prodDayMs,
+        items: [prod]
+      });
+    } else {
+      const gapDays = Math.round((prodDayMs - lastCohort.lastDayMs) / 86400000);
+      if (gapDays <= 7) {
+        lastCohort.endDate = prod.entryDate;
+        lastCohort.lastDayMs = prodDayMs;
+        lastCohort.items.push(prod);
+      } else {
+        rawCohorts.push({
+          startDate: prod.entryDate,
+          endDate: prod.entryDate,
+          lastDayMs: prodDayMs,
+          items: [prod]
+        });
+      }
+    }
+  }
+
+  const purchaseCohorts = rawCohorts.map((c, idx) => {
+    const cohortNumber = idx + 1;
+    const initialUnits = c.items.reduce((a, i) => a + i.initialUnits, 0);
+    const soldUnits = c.items.reduce((a, i) => a + i.soldUnits, 0);
+    const currentStock = c.items.reduce((a, i) => a + i.currentStock, 0);
+    const periodSoldUnits = c.items.reduce((a, i) => a + i.periodSoldUnits, 0);
+    const periodRevenueUsd = r2(c.items.reduce((a, i) => a + i.periodRevenueUsd, 0));
+
+    const initialCostUsd = r2(c.items.reduce((a, i) => a + i.initialCostUsd, 0));
+    const remainingCostUsd = r2(c.items.reduce((a, i) => a + i.remainingCostUsd, 0));
+    const remainingRetailUsd = r2(c.items.reduce((a, i) => a + i.remainingRetailUsd, 0));
+    const revenueUsd = r2(c.items.reduce((a, i) => a + i.revenueUsd, 0));
+    const netProfitRealizedUsd = r2(revenueUsd - initialCostUsd);
+    const costRecoveryPct = pct1(revenueUsd, initialCostUsd);
+
+    const effectivenessPct = pct1(soldUnits, initialUnits);
+    const deadStockPct = r2(Math.max(0, 100 - effectivenessPct));
+
+    const startMs = new Date(`${c.startDate}T12:00:00Z`).getTime();
+    const daysSinceEntry = Math.max(1, Math.round((nowMs - startMs) / 86400000));
+    const velocityPerDay = Math.round((soldUnits / daysSinceEntry) * 100) / 100;
+    const daysToClearRemaining = currentStock === 0
+      ? 0
+      : (velocityPerDay > 0 ? Math.min(999, Math.round(currentStock / velocityPerDay)) : 999);
+
+    // Proyección a 45 días para compras en maduración
+    const projectedSold45d = Math.min(initialUnits, Math.round(velocityPerDay * 45));
+    const projectedEffectiveness45d = pct1(projectedSold45d, initialUnits);
+
+    // Meta 80/20: Máximo 20% del lote inicial debería quedar sin vender
+    const maxHealthyRemainingUnits = Math.floor(initialUnits * 0.20);
+    const excessDeadStockUnits = Math.max(0, currentStock - maxHealthyRemainingUnits);
+    const avgUnitCost = initialUnits > 0 ? initialCostUsd / initialUnits : 0;
+    const excessDeadStockCostUsd = r2(excessDeadStockUnits * avgUnitCost);
+
+    let status = 'HEALTHY_80_20';
+    if (effectivenessPct >= 80) {
+      status = 'HEALTHY_80_20'; // Meta cumplida: >=80% vendido, <=20% restante
+    } else if (daysSinceEntry < 45) {
+      status = 'IN_MATURATION'; // Compra reciente aún en ciclo de maduración (<45 días)
+    } else if (effectivenessPct >= 65) {
+      status = 'WARNING_SLOW'; // Entre 20% y 35% de stock restante tras +45 días
+    } else {
+      status = 'ALERT_DEAD_STOCK'; // Más de 35% estancado tras +45 días
+    }
+
+    // Desglose por categoría dentro de esta compra
+    const catMap = new Map();
+    for (const item of c.items) {
+      const ce = catMap.get(item.category) || {
+        category: item.category,
+        modelsCount: 0,
+        initialUnits: 0,
+        soldUnits: 0,
+        currentStock: 0,
+        initialCostUsd: 0,
+        remainingCostUsd: 0,
+        revenueUsd: 0
+      };
+      ce.modelsCount += 1;
+      ce.initialUnits += item.initialUnits;
+      ce.soldUnits += item.soldUnits;
+      ce.currentStock += item.currentStock;
+      ce.initialCostUsd = r2(ce.initialCostUsd + item.initialCostUsd);
+      ce.remainingCostUsd = r2(ce.remainingCostUsd + item.remainingCostUsd);
+      ce.revenueUsd = r2(ce.revenueUsd + item.revenueUsd);
+      catMap.set(item.category, ce);
+    }
+
+    const categoriesBreakdown = Array.from(catMap.values())
+      .map(ce => ({
+        ...ce,
+        shareOfCohortUnitsPct: pct1(ce.initialUnits, initialUnits),
+        effectivenessPct: pct1(ce.soldUnits, ce.initialUnits),
+        deadStockPct: r2(Math.max(0, 100 - pct1(ce.soldUnits, ce.initialUnits)))
+      }))
+      .sort((a, b) => b.initialUnits - a.initialUnits);
+
+    return {
+      id: `COHORT-${cohortNumber}`,
+      cohortNumber,
+      startDate: c.startDate,
+      endDate: c.endDate,
+      daysSinceEntry,
+      modelsCount: c.items.length,
+      initialUnits,
+      soldUnits,
+      currentStock,
+      periodSoldUnits,
+      periodRevenueUsd,
+      effectivenessPct,
+      deadStockPct,
+      maxHealthyRemainingUnits,
+      excessDeadStockUnits,
+      excessDeadStockCostUsd,
+      velocityPerDay,
+      daysToClearRemaining,
+      projectedEffectiveness45d,
+      initialCostUsd,
+      remainingCostUsd,
+      remainingRetailUsd,
+      revenueUsd,
+      netProfitRealizedUsd,
+      costRecoveryPct,
+      status,
+      categoriesBreakdown,
+      models: [...c.items].sort((a, b) => b.effectivenessPct - a.effectivenessPct)
+    };
+  }).sort((a, b) => b.startDate.localeCompare(a.startDate)); // Del lote más reciente al más antiguo
+
+  // -------------------------------------------------------------------------
+  // 2. MATRIZ DE SELECCIÓN POR CATEGORÍA (¿QUÉ COMPRAR MÁS Y QUÉ COMPRAR MENOS?)
+  // -------------------------------------------------------------------------
+  const totalInitialUnitsAll = productList.reduce((a, i) => a + i.initialUnits, 0);
+  const totalSoldUnitsAll = productList.reduce((a, i) => a + i.soldUnits, 0);
+  const totalCurrentStockAll = productList.reduce((a, i) => a + i.currentStock, 0);
+  const totalInitialCostAll = r2(productList.reduce((a, i) => a + i.initialCostUsd, 0));
+  const totalRemainingCostAll = r2(productList.reduce((a, i) => a + i.remainingCostUsd, 0));
+  const totalRemainingRetailAll = r2(productList.reduce((a, i) => a + i.remainingRetailUsd, 0));
+  const totalHistoricalRevenueAll = r2(productList.reduce((a, i) => a + i.revenueUsd, 0));
+
+  const globalCatMap = new Map();
+  for (const item of productList) {
+    const gc = globalCatMap.get(item.category) || {
+      category: item.category,
+      group: item.group,
+      modelsCount: 0,
+      initialUnits: 0,
+      soldUnits: 0,
+      currentStock: 0,
+      deadStockUnits: 0,
+      initialCostUsd: 0,
+      remainingCostUsd: 0,
+      remainingRetailUsd: 0,
+      revenueUsd: 0
+    };
+    gc.modelsCount += 1;
+    gc.initialUnits += item.initialUnits;
+    gc.soldUnits += item.soldUnits;
+    gc.currentStock += item.currentStock;
+    if (item.status === 'DEAD_STOCK' || item.status === 'SLOW') {
+      gc.deadStockUnits += item.currentStock;
+    }
+    gc.initialCostUsd = r2(gc.initialCostUsd + item.initialCostUsd);
+    gc.remainingCostUsd = r2(gc.remainingCostUsd + item.remainingCostUsd);
+    gc.remainingRetailUsd = r2(gc.remainingRetailUsd + item.remainingRetailUsd);
+    gc.revenueUsd = r2(gc.revenueUsd + item.revenueUsd);
+    globalCatMap.set(item.category, gc);
+  }
+
+  const categorySelectionMatrix = Array.from(globalCatMap.values())
+    .map(gc => {
+      const effectivenessPct = pct1(gc.soldUnits, gc.initialUnits);
+      const deadStockPct = r2(Math.max(0, 100 - effectivenessPct));
+      const shareOfPurchasePct = pct1(gc.initialUnits, totalInitialUnitsAll);
+      const shareOfSalesPct = pct1(gc.soldUnits, totalSoldUnitsAll);
+      const shareOfRemainingStockPct = pct1(gc.currentStock, totalCurrentStockAll);
+      const selectionGapPct = r2(shareOfSalesPct - shareOfPurchasePct);
+      const costRecoveryPct = pct1(gc.revenueUsd, gc.initialCostUsd);
+
+      let recommendation = 'BALANCED';
+      let actionLabel = 'Selección Equilibrada';
+      if (effectivenessPct >= 75 || (effectivenessPct >= 62 && selectionGapPct >= 2)) {
+        recommendation = 'BUY_MORE';
+        actionLabel = 'Priorizar / Comprar Más';
+      } else if (effectivenessPct < 55 || deadStockPct > 45 || selectionGapPct <= -3) {
+        recommendation = 'BUY_LESS';
+        actionLabel = 'Reducir / Ajustar Selección';
+      }
+
+      return {
+        ...gc,
+        effectivenessPct,
+        deadStockPct,
+        shareOfPurchasePct,
+        shareOfSalesPct,
+        shareOfRemainingStockPct,
+        selectionGapPct,
+        costRecoveryPct,
+        recommendation,
+        actionLabel
+      };
+    })
+    .sort((a, b) => b.effectivenessPct - a.effectivenessPct || b.soldUnits - a.soldUnits);
+
+  // -------------------------------------------------------------------------
+  // 3. RESUMEN GLOBAL DE EFECTIVIDAD Y SALUD 80/20
+  // -------------------------------------------------------------------------
+  const globalEffectivenessPct = pct1(totalSoldUnitsAll, totalInitialUnitsAll);
+  const globalRemainingPct = r2(Math.max(0, 100 - globalEffectivenessPct));
+
+  // Prendas estancadas (DEAD_STOCK)
+  const deadStockModels = productList.filter(p => p.status === 'DEAD_STOCK');
+  const slowModels = productList.filter(p => p.status === 'SLOW');
+  const starModels = productList.filter(p => p.status === 'STAR');
+  const soldOutModels = productList.filter(p => p.status === 'SOLD_OUT');
+
+  const deadStockUnitsTotal = deadStockModels.reduce((a, p) => a + p.currentStock, 0);
+  const deadStockCostUsd = r2(deadStockModels.reduce((a, p) => a + p.remainingCostUsd, 0));
+  const deadStockRetailUsd = r2(deadStockModels.reduce((a, p) => a + p.remainingRetailUsd, 0));
+  const deadStockOverInitialPct = pct1(deadStockUnitsTotal, totalInitialUnitsAll);
+  const deadStockOverCurrentStockPct = pct1(deadStockUnitsTotal, totalCurrentStockAll);
+
+  // Meta del 20%: sobre compras maduras (>= 45 días desde el ingreso)
+  const matureProducts = productList.filter(p => p.daysInInventory >= 45);
+  const matureInitialUnits = matureProducts.reduce((a, p) => a + p.initialUnits, 0);
+  const matureSoldUnits = matureProducts.reduce((a, p) => a + p.soldUnits, 0);
+  const matureRemainingUnits = matureProducts.reduce((a, p) => a + p.currentStock, 0);
+  const matureEffectivenessPct = pct1(matureSoldUnits, matureInitialUnits);
+  const matureDeadStockPct = r2(Math.max(0, 100 - matureEffectivenessPct));
+
+  return {
+    globalSummary: {
+      totalModelsAnalyzed: productList.length,
+      totalInitialUnits: totalInitialUnitsAll,
+      totalSoldUnits: totalSoldUnitsAll,
+      totalCurrentStock: totalCurrentStockAll,
+      globalEffectivenessPct,
+      globalRemainingPct,
+      matureInitialUnits,
+      matureSoldUnits,
+      matureRemainingUnits,
+      matureEffectivenessPct,
+      matureDeadStockPct,
+      targetEffectivenessPct: 80,
+      maxHealthyDeadStockPct: 20,
+      isWithinTarget20Pct: matureDeadStockPct <= 20,
+      deadStockModelsCount: deadStockModels.length,
+      slowModelsCount: slowModels.length,
+      starModelsCount: starModels.length,
+      soldOutModelsCount: soldOutModels.length,
+      deadStockUnitsTotal,
+      deadStockCostUsd,
+      deadStockRetailUsd,
+      deadStockOverInitialPct,
+      deadStockOverCurrentStockPct,
+      totalInitialCostUsd: totalInitialCostAll,
+      totalRemainingCostUsd: totalRemainingCostAll,
+      totalRemainingRetailUsd: totalRemainingRetailAll,
+      totalHistoricalRevenueUsd: totalHistoricalRevenueAll,
+      globalCostRecoveryPct: pct1(totalHistoricalRevenueAll, totalInitialCostAll)
+    },
+    purchaseCohorts,
+    categorySelectionMatrix,
+    products: productList
   };
 }
 
