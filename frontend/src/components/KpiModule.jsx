@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Lock, Unlock, ShieldAlert, BarChart3, TrendingUp, TrendingDown, 
   DollarSign, ShoppingBag, Calendar, ArrowUpRight, ArrowDownRight, 
-  Layers, Wallet, RefreshCw, AlertTriangle, Package, CheckCircle2, ChevronRight
+  Layers, Wallet, RefreshCw, AlertTriangle, Package, CheckCircle2, ChevronRight,
+  Search, X, SlidersHorizontal, Sparkles, Eye
 } from 'lucide-react';
 
 const API_BASE_URL = 'https://microapp-vk-bff.jjhernandezz100.workers.dev';
@@ -80,14 +81,33 @@ export default function KpiModule({ bcvRate }) {
   const [enableCompare, setEnableCompare] = useState(false);
   const [compareType, setCompareType] = useState('previous_period'); // 'previous_period' | 'previous_year'
 
-  // Pestañas Internas del Módulo KPI
-  const [subTab, setSubTab] = useState('resumen'); // 'resumen' | 'canales' | 'finanzas' | 'almacen' | 'rotacion'
+  // Pestañas Internas del Módulo KPI (Separadas Compras 80/20 y Rotación de Prendas)
+  const [subTab, setSubTab] = useState('resumen'); // 'resumen' | 'canales' | 'finanzas' | 'almacen' | 'compras' | 'rotacion'
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  // Estados de filtro para la Pestaña de Rotación & Efectividad de Compras
+  // Estados interactivos para Pestaña 1: Resumen Diario
+  const [dailyFilter, setDailyFilter] = useState('ALL'); // 'ALL' | 'HIGH' | 'AVG' | 'LOW'
+  const [showAllDays, setShowAllDays] = useState(false);
+
+  // Estados interactivos para Pestaña 2: Canales & Prendas Vendidas
+  const [channelProductSearch, setChannelProductSearch] = useState('');
+  const [channelCategoryFilter, setChannelCategoryFilter] = useState('ALL');
+  const [showAllSoldProducts, setShowAllSoldProducts] = useState(false);
+
+  // Estados interactivos para Pestaña 5: Compras 80/20 (Cohorts y Matriz)
+  const [cohortStatusFilter, setCohortStatusFilter] = useState('ALL'); // 'ALL' | 'HEALTHY' | 'IN_MATURATION' | 'ALERT'
   const [expandedCohortId, setExpandedCohortId] = useState(null);
-  const [rotationFilter, setRotationFilter] = useState('ALL'); // 'ALL' | 'STAR' | 'DEAD_STOCK' | 'SLOW' | 'HIGH_COST' | 'SOLD_OUT'
+  const [cohortModelSearch, setCohortModelSearch] = useState('');
+  const [cohortModelStatusFilter, setCohortModelStatusFilter] = useState('ALL');
+  const [showAllCohortModels, setShowAllCohortModels] = useState(false);
+  const [matrixRecFilter, setMatrixRecFilter] = useState('ALL'); // 'ALL' | 'BUY_MORE' | 'BALANCED' | 'BUY_LESS'
+
+  // Estados interactivos para Pestaña 6: Explorador de Rotación por Prenda
+  const [rotationFilter, setRotationFilter] = useState('ALL'); // 'ALL' | 'STAR' | 'HEALTHY' | 'SLOW' | 'DEAD_STOCK' | 'SOLD_OUT' | 'HIGH_COST'
   const [rotationCategoryFilter, setRotationCategoryFilter] = useState('ALL');
   const [rotationSearch, setRotationSearch] = useState('');
+  const [rotationSortBy, setRotationSortBy] = useState('VELOCITY_DESC'); // 'VELOCITY_DESC' | 'EFFECTIVENESS_DESC' | 'EFFECTIVENESS_ASC' | 'CAPITAL_DESC' | 'STALE_DESC' | 'RECENT_DESC'
+  const [showAllRotationProducts, setShowAllRotationProducts] = useState(false);
 
   // Datos de API
   const [loading, setLoading] = useState(false);
@@ -270,43 +290,79 @@ export default function KpiModule({ bcvRate }) {
   return (
     <div className="flex flex-col h-full bg-[#0b0f19] text-slate-100 overflow-y-auto pb-24 no-scrollbar">
       
-      {/* BARRA SUPERIOR DE CONTROL: PERÍODO Y COMPARACIÓN */}
-      <div className="bg-[#0f172a]/95 border-b border-slate-800 p-2.5 sm:p-3 md:p-3 space-y-2.5 md:space-y-0 sticky top-0 z-30 backdrop-blur-md shadow-md md:flex md:items-center md:justify-between md:gap-3">
+      {/* BARRA SUPERIOR DE CONTROL: SUB-PESTAÑAS + PERÍODO COLAPSABLE EN MÓVIL */}
+      <div className="bg-[#0f172a]/95 border-b border-slate-800 px-2.5 py-2 sm:p-3 sticky top-0 z-30 backdrop-blur-md shadow-md space-y-2 xl:space-y-0 xl:flex xl:items-center xl:justify-between xl:gap-3">
         
-        {/* Izquierda: Sub-pestañas integradas */}
-        <div className="flex items-center space-x-2 shrink-0">
-          <div className="hidden lg:flex items-center space-x-2 mr-1.5">
-            <div className="p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
-              <BarChart3 className="w-4 h-4" />
+        {/* Fila Principal: Sub-pestañas + Controles Compactos en Móvil */}
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center space-x-2 min-w-0 flex-1">
+            <div className="hidden lg:flex items-center space-x-2 mr-1 shrink-0">
+              <div className="p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <span className="font-black text-white text-xs whitespace-nowrap">KPIs Live</span>
             </div>
-            <span className="font-black text-white text-xs whitespace-nowrap">KPIs Live</span>
+
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-2xl border border-slate-800/80 overflow-x-auto no-scrollbar max-w-full">
+              {[
+                { id: 'resumen', label: '🎯 Resumen' },
+                { id: 'canales', label: '📊 Canales' },
+                { id: 'finanzas', label: '💱 Finanzas' },
+                { id: 'almacen', label: '📦 Almacén' },
+                { id: 'compras', label: '🛍️ Compras 80/20' },
+                { id: 'rotacion', label: '⏱️ Rotación' }
+              ].map((st) => (
+                <button
+                  key={st.id}
+                  onClick={() => setSubTab(st.id)}
+                  className={`px-2.5 py-1.5 text-center text-xs font-extrabold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+                    subTab === st.id
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-inner'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-2xl border border-slate-800/80 overflow-x-auto no-scrollbar max-w-full">
-            {[
-              { id: 'resumen', label: '🎯 Resumen' },
-              { id: 'canales', label: '📊 Canales' },
-              { id: 'finanzas', label: '💱 Finanzas' },
-              { id: 'almacen', label: '📦 Almacén' },
-              { id: 'rotacion', label: '🔄 Rotación & Compras' }
-            ].map((st) => (
-              <button
-                key={st.id}
-                onClick={() => setSubTab(st.id)}
-                className={`px-2.5 py-1 text-center text-xs font-extrabold rounded-xl transition-all whitespace-nowrap ${
-                  subTab === st.id
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-inner'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
+          {/* Botones Rápidos en Móvil/Tablet para abrir/cerrar Fechas + Refrescar + Bloquear */}
+          <div className="flex xl:hidden items-center space-x-1 shrink-0">
+            <button
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center space-x-1 border transition-all cursor-pointer ${
+                showMobileFilters || enableCompare || preset !== 'this_month'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-900 text-slate-300 border-slate-800'
+              }`}
+              title="Filtrar fechas y comparaciones"
+            >
+              <Calendar className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">
+                {preset === 'today' ? 'Hoy' : preset === 'yesterday' ? 'Ayer' : preset === 'this_month' ? 'Este Mes' : preset === 'last_month' ? 'Mes Ant.' : `${fromDate.slice(5)}/${toDate.slice(5)}`}
+              </span>
+            </button>
+            <button
+              onClick={fetchKpis}
+              disabled={loading}
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all active:scale-90 cursor-pointer"
+              title="Actualizar datos ERP"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-amber-400' : ''}`} />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 transition-all cursor-pointer"
+              title="Bloquear módulo"
+            >
+              <Lock className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
-        {/* Derecha: Selector de Presets + Rango + Comparar + Botones Acción */}
-        <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar shrink-0 justify-end">
+        {/* Derecha / Fila Colapsable en Móvil: Selector de Presets + Rango + Comparar + Botones Acción */}
+        <div className={`${showMobileFilters ? 'flex' : 'hidden xl:flex'} flex-wrap items-center gap-2 overflow-x-auto no-scrollbar shrink-0 justify-between xl:justify-end pt-1 xl:pt-0 border-t border-slate-800/70 xl:border-t-0`}>
           {/* Presets */}
           <div className="flex items-center space-x-1 shrink-0">
             {[
@@ -319,9 +375,9 @@ export default function KpiModule({ bcvRate }) {
               <button
                 key={p.id}
                 onClick={() => handlePresetChange(p.id)}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold shrink-0 transition-all border ${
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold shrink-0 transition-all border cursor-pointer ${
                   preset === p.id
-                    ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm scale-105'
+                    ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm'
                     : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
                 }`}
               >
@@ -373,19 +429,19 @@ export default function KpiModule({ bcvRate }) {
             )}
           </div>
 
-          {/* Botones Refrescar / Bloquear */}
-          <div className="flex items-center space-x-1 shrink-0">
+          {/* Botones Refrescar / Bloquear en Desktop */}
+          <div className="hidden xl:flex items-center space-x-1 shrink-0">
             <button
               onClick={fetchKpis}
               disabled={loading}
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all active:scale-90"
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all active:scale-90 cursor-pointer"
               title="Actualizar datos ERP"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-amber-400' : ''}`} />
             </button>
             <button
               onClick={handleLogout}
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 transition-all"
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 transition-all cursor-pointer"
               title="Bloquear módulo"
             >
               <Lock className="w-3.5 h-3.5" />
@@ -633,27 +689,48 @@ export default function KpiModule({ bcvRate }) {
                 </div>
               </div>
 
-              {/* Doble Escala: 1) Por Facturación USD  2) Por Cantidad de Ventas Día a Día */}
+              {/* Doble Escala Interactiva: 1) Por Facturación USD  2) Por Cantidad de Ventas Día a Día */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Escala por Facturación USD */}
+                {/* Escala por Facturación USD (Interactiva: filtra listado inferior) */}
                 <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3 space-y-2">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
-                    <span>💵 Escala por Facturación ($/día)</span>
+                    <span>💵 Escala por Facturación ($/día) · <span className="text-slate-400 font-normal">Toca para filtrar</span></span>
                     <span className="font-mono text-amber-400">${(daily.dailyAvgUsd || 0).toFixed(2)} prom.</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-xl">
+                    <button
+                      onClick={() => setDailyFilter(dailyFilter === 'HIGH' ? 'ALL' : 'HIGH')}
+                      className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                        dailyFilter === 'HIGH'
+                          ? 'bg-emerald-500/25 border-emerald-400 ring-1 ring-emerald-400/50'
+                          : 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20'
+                      }`}
+                    >
                       <div className="text-emerald-400 font-bold text-sm font-mono">{daily.daysAboveAvg || 0} días</div>
                       <span className="text-[9px] text-emerald-300/80 font-bold uppercase">Alto (+15%)</span>
-                    </div>
-                    <div className="bg-blue-500/10 border border-blue-500/30 p-2 rounded-xl">
+                    </button>
+                    <button
+                      onClick={() => setDailyFilter(dailyFilter === 'AVG' ? 'ALL' : 'AVG')}
+                      className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                        dailyFilter === 'AVG'
+                          ? 'bg-blue-500/25 border-blue-400 ring-1 ring-blue-400/50'
+                          : 'bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20'
+                      }`}
+                    >
                       <div className="text-blue-400 font-bold text-sm font-mono">{daily.daysInAvg || 0} días</div>
                       <span className="text-[9px] text-blue-300/80 font-bold uppercase">En la Media</span>
-                    </div>
-                    <div className="bg-red-500/10 border border-red-500/30 p-2 rounded-xl">
+                    </button>
+                    <button
+                      onClick={() => setDailyFilter(dailyFilter === 'LOW' ? 'ALL' : 'LOW')}
+                      className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                        dailyFilter === 'LOW'
+                          ? 'bg-red-500/25 border-red-400 ring-1 ring-red-400/50'
+                          : 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20'
+                      }`}
+                    >
                       <div className="text-red-400 font-bold text-sm font-mono">{daily.daysBelowAvg || 0} días</div>
                       <span className="text-[9px] text-red-300/80 font-bold uppercase">Alerta Bajo</span>
-                    </div>
+                    </button>
                   </div>
                 </div>
 
@@ -680,86 +757,123 @@ export default function KpiModule({ bcvRate }) {
                 </div>
               </div>
 
-              {/* Listado / Histórico Diario Visual (Más reciente primero) */}
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Detalle Día a Día (Más reciente primero):</span>
-                  {(daily.dailyAvgMerchandiseUsd || 0) > 0 && (daily.dailyAvgUsd || 0) !== (daily.dailyAvgMerchandiseUsd || 0) && (
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      Media solo mercancía: ${(daily.dailyAvgMerchandiseUsd || 0).toFixed(2)}/día
-                    </span>
-                  )}
-                </div>
-                <div className="max-h-64 overflow-y-auto space-y-2 no-scrollbar pr-1">
-                  {(daily.list || []).map((day) => {
-                    const isHigh = day.status === 'HIGH';
-                    const isLow = day.status === 'LOW';
-                    const isInProgress = day.status === 'IN_PROGRESS';
+              {/* Listado / Histórico Diario Visual (Más reciente primero, sin doble scroll atrapado) */}
+              {(() => {
+                const rawDays = daily.list || [];
+                const filteredDays = rawDays.filter((d) => {
+                  if (dailyFilter === 'ALL') return true;
+                  if (dailyFilter === 'HIGH') return d.status === 'HIGH';
+                  if (dailyFilter === 'LOW') return d.status === 'LOW';
+                  if (dailyFilter === 'AVG') return d.status === 'AVG' || d.status === 'IN_PROGRESS';
+                  return true;
+                });
+                const visibleDays = showAllDays ? filteredDays : filteredDays.slice(0, 10);
 
-                    const ordHigh = day.ordersStatus === 'HIGH';
-                    const ordLow = day.ordersStatus === 'LOW';
-                    const ordProg = day.ordersStatus === 'IN_PROGRESS';
-
-                    return (
-                      <div 
-                        key={day.date}
-                        className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs transition-all ${
-                          isHigh 
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200' 
-                            : isLow 
-                              ? 'bg-red-500/10 border-red-500/30 text-red-200' 
-                              : 'bg-slate-950/70 border-slate-800 text-slate-300'
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono font-bold text-white capitalize">
-                            {formatVeDayLabel(day.date)} <span className="text-slate-500 font-normal text-[10px]">({day.date})</span>
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase ${
-                            isHigh
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : isLow
-                                ? 'bg-red-500/20 text-red-400'
-                                : isInProgress
-                                  ? 'bg-amber-500/20 text-amber-300'
-                                  : 'bg-slate-800 text-slate-400'
-                          }`}>
-                            {isHigh ? '💵 Alto' : isLow ? '💵 Alerta Bajo' : isInProgress ? '⏳ En Curso' : '💵 Normal'}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase ${
-                            ordHigh
-                              ? 'bg-sky-500/20 text-sky-300'
-                              : ordLow
-                                ? 'bg-red-500/20 text-red-300'
-                                : ordProg
-                                  ? 'bg-amber-500/20 text-amber-300'
-                                  : 'bg-slate-800 text-slate-400'
-                          }`}>
-                            {ordHigh ? '🧾 Ventas Alto' : ordLow ? '🧾 Ventas Bajo' : ordProg ? '🧾 En Curso' : '🧾 Ventas Media'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between sm:justify-end space-x-4 font-mono font-bold">
-                          <div className="text-right">
-                            <span className="text-slate-200">{day.orderCount} ventas ({day.totalUnits} prendas)</span>
-                            {(day.collabOrderCount || 0) > 0 && (
-                              <span className="block text-[9px] text-amber-300/80">incl. {day.collabOrderCount} colab. ($0)</span>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <span className="text-amber-400 block">${day.totalUsd.toFixed(2)} USD</span>
-                            {(day.deliveryUsd || 0) > 0 && (
-                              <span className="text-[9px] text-slate-400 block">
-                                Merc. ${(day.merchandiseUsd ?? day.totalUsd).toFixed(0)} + Deliv. ${day.deliveryUsd.toFixed(0)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                return (
+                  <div className="space-y-2.5 pt-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          Detalle Día a Día ({filteredDays.length} días):
+                        </span>
+                        {dailyFilter !== 'ALL' && (
+                          <button
+                            onClick={() => setDailyFilter('ALL')}
+                            className="text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-lg hover:bg-amber-500/25 cursor-pointer"
+                          >
+                            ✕ Quitar filtro ({dailyFilter === 'HIGH' ? 'Alto' : dailyFilter === 'LOW' ? 'Alerta Bajo' : 'En la Media'})
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      <div className="flex items-center space-x-2">
+                        {(daily.dailyAvgMerchandiseUsd || 0) > 0 && (daily.dailyAvgUsd || 0) !== (daily.dailyAvgMerchandiseUsd || 0) && (
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            Media solo mercancía: ${(daily.dailyAvgMerchandiseUsd || 0).toFixed(2)}/día
+                          </span>
+                        )}
+                        {filteredDays.length > 10 && (
+                          <button
+                            onClick={() => setShowAllDays(!showAllDays)}
+                            className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-xl cursor-pointer"
+                          >
+                            {showAllDays ? 'Compactar a últimos 10 días' : `Ver todos (${filteredDays.length} días)`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                      {visibleDays.map((day) => {
+                        const isHigh = day.status === 'HIGH';
+                        const isLow = day.status === 'LOW';
+                        const isInProgress = day.status === 'IN_PROGRESS';
+
+                        const ordHigh = day.ordersStatus === 'HIGH';
+                        const ordLow = day.ordersStatus === 'LOW';
+                        const ordProg = day.ordersStatus === 'IN_PROGRESS';
+
+                        return (
+                          <div 
+                            key={day.date}
+                            className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs transition-all ${
+                              isHigh 
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200' 
+                                : isLow 
+                                  ? 'bg-red-500/10 border-red-500/30 text-red-200' 
+                                  : 'bg-slate-950/70 border-slate-800 text-slate-300'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-mono font-bold text-white capitalize">
+                                {formatVeDayLabel(day.date)} <span className="text-slate-500 font-normal text-[10px]">({day.date})</span>
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase ${
+                                isHigh
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : isLow
+                                    ? 'bg-red-500/20 text-red-400'
+                                    : isInProgress
+                                      ? 'bg-amber-500/20 text-amber-300'
+                                      : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {isHigh ? '💵 Alto' : isLow ? '💵 Alerta Bajo' : isInProgress ? '⏳ En Curso' : '💵 Normal'}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase ${
+                                ordHigh
+                                  ? 'bg-sky-500/20 text-sky-300'
+                                  : ordLow
+                                    ? 'bg-red-500/20 text-red-300'
+                                    : ordProg
+                                      ? 'bg-amber-500/20 text-amber-300'
+                                      : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {ordHigh ? '🧾 Ventas Alto' : ordLow ? '🧾 Ventas Bajo' : ordProg ? '🧾 En Curso' : '🧾 Ventas Media'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end space-x-3 font-mono font-bold shrink-0">
+                              <div className="text-right">
+                                <span className="text-slate-200">{day.orderCount} vtas ({day.totalUnits} unds)</span>
+                                {(day.collabOrderCount || 0) > 0 && (
+                                  <span className="block text-[9px] text-amber-300/80">incl. {day.collabOrderCount} colab. ($0)</span>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <span className="text-amber-400 block">${day.totalUsd.toFixed(2)}</span>
+                                {(day.deliveryUsd || 0) > 0 && (
+                                  <span className="text-[9px] text-slate-400 block">
+                                    M:${(day.merchandiseUsd ?? day.totalUsd).toFixed(0)} + D:${day.deliveryUsd.toFixed(0)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
 
@@ -847,33 +961,108 @@ export default function KpiModule({ bcvRate }) {
               })()}
             </div>
 
-            {/* TOP PRODUCTOS MÁS VENDIDOS */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 space-y-3 shadow-xl">
-              <div className="flex items-center justify-between">
-                <h3 className="font-extrabold text-white text-sm">Top Prendas Más Vendidas</h3>
-                <span className="text-[10px] text-slate-400">Excluye bolsas, cajas, accesorios y colaboraciones $0</span>
-              </div>
-              <div className="space-y-2">
-                {(kpiData?.topProducts || []).map((p, idx) => (
-                  <div key={idx} className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-2">
-                      <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold text-[11px] flex items-center justify-center border border-amber-500/30">
-                        {idx + 1}
-                      </span>
-                      <div>
-                        <h4 className="font-bold text-white">{p.name}</h4>
-                        <span className="text-[10px] text-slate-400 uppercase">{p.category}</span>
-                      </div>
+            {/* EXPLORADOR DE PRENDAS VENDIDAS EN EL PERÍODO (CON BUSCADOR Y VER TODAS) */}
+            {(() => {
+              const allSold = kpiData?.allProductsSold || kpiData?.topProducts || [];
+              const soldCategories = ['ALL', ...Array.from(new Set(allSold.map(p => p.category).filter(Boolean))).sort()];
+              const filteredSold = allSold.filter(p => {
+                if (channelCategoryFilter !== 'ALL' && p.category !== channelCategoryFilter) return false;
+                if (channelProductSearch.trim()) {
+                  const q = channelProductSearch.toLowerCase().trim();
+                  return (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q);
+                }
+                return true;
+              });
+              const visibleSold = (showAllSoldProducts || channelProductSearch.trim() || channelCategoryFilter !== 'ALL')
+                ? filteredSold
+                : filteredSold.slice(0, 10);
+
+              return (
+                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span>Ranking de Prendas Vendidas en el Período ({filteredSold.length} modelos)</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-400">
+                        Excluye bolsas, cajas, accesorios y colaboraciones $0. Busca cualquier prenda o despliega la lista completa.
+                      </p>
                     </div>
 
-                    <div className="text-right font-mono font-bold">
-                      <div className="text-emerald-400">{p.units} unds</div>
-                      <div className="text-[10px] text-slate-400">${p.totalUsd.toFixed(2)} USD</div>
+                    {/* Buscador + Botón Ver Todas */}
+                    <div className="flex items-center space-x-2">
+                      <div className="relative flex-1 sm:w-56">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={channelProductSearch}
+                          onChange={(e) => setChannelProductSearch(e.target.value)}
+                          placeholder="Buscar prenda vendida..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                        />
+                        {channelProductSearch && (
+                          <button
+                            onClick={() => setChannelProductSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {filteredSold.length > 10 && (
+                        <button
+                          onClick={() => setShowAllSoldProducts(!showAllSoldProducts)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 shrink-0 cursor-pointer"
+                        >
+                          {showAllSoldProducts ? 'Ver Top 10' : `Ver todas (${filteredSold.length})`}
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+
+                  {/* Chips de Categoría */}
+                  {soldCategories.length > 2 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      {soldCategories.map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => setChannelCategoryFilter(cat)}
+                          className={`px-2.5 py-1 rounded-xl text-[11px] font-bold shrink-0 border transition-all cursor-pointer ${
+                            channelCategoryFilter === cat
+                              ? 'bg-amber-400 text-slate-950 border-amber-400'
+                              : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          {cat === 'ALL' ? `Todas (${allSold.length})` : cat}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {visibleSold.map((p, idx) => (
+                      <div key={idx} className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex items-center justify-between text-xs hover:border-slate-700 transition-all">
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold text-[11px] flex items-center justify-center border border-amber-500/30 shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-white truncate">{p.name}</h4>
+                            <span className="text-[10px] text-slate-400 uppercase font-mono">{p.category}</span>
+                          </div>
+                        </div>
+
+                        <div className="text-right font-mono font-bold shrink-0 ml-2">
+                          <div className="text-emerald-400">{p.units} unds</div>
+                          <div className="text-[10px] text-slate-400">${p.totalUsd.toFixed(2)} USD</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
         )}
@@ -950,7 +1139,7 @@ export default function KpiModule({ bcvRate }) {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {(kpiData?.paymentMethods || []).map((pm, idx) => (
                   <div key={idx} className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex items-center justify-between text-xs gap-2">
                     <div className="space-y-0.5">
@@ -991,7 +1180,7 @@ export default function KpiModule({ bcvRate }) {
         )}
 
         {/* ===================================================================
-            PESTAÑA 4: 📦 BALANCE DE ALMACÉN
+            PESTAÑA 4: 📦 BALANCE DE ALMACÉN, CURVA DE TALLAS Y CATEGORÍAS
             =================================================================== */}
         {subTab === 'almacen' && (
           <div className="space-y-4">
@@ -1059,47 +1248,100 @@ export default function KpiModule({ bcvRate }) {
               })()}
             </div>
 
+            {/* CURVA DE TALLAS DISPONIBLES EN ALMACÉN */}
+            {(kpiData?.stockBalance?.sizeCurve || []).length > 0 && (
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3 shadow-xl">
+                <div>
+                  <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                    <SlidersHorizontal className="w-4 h-4 text-sky-400" />
+                    <span>Curva de Tallas Disponible en Tienda</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Detecta de un vistazo si alguna talla clave (S, M, L, XL) se está quedando sin stock en el almacén.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+                  {(kpiData?.stockBalance?.sizeCurve || []).map((sc) => (
+                    <div key={sc.size} className="bg-slate-950 p-3 rounded-2xl border border-slate-800 text-center space-y-1">
+                      <span className="text-xs font-black text-amber-400 font-mono block">Talla {sc.size}</span>
+                      <div className="text-lg font-black text-white font-mono">{sc.units} <span className="text-[10px] font-normal text-slate-400">unds</span></div>
+                      <span className="text-[10px] font-mono text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 inline-block">
+                        {sc.pct}% del stock
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* STOCK Y VALOR POR CATEGORÍA */}
+            {(kpiData?.stockBalance?.stockByCategory || []).length > 0 && (
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3 shadow-xl">
+                <div>
+                  <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                    <span>Distribución de Inventario y Capital por Categoría</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Unidades físicas, peso porcentual en el almacén, costo invertido y valor de venta (PVP) por familia de prenda.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {(kpiData?.stockBalance?.stockByCategory || []).map((cat) => (
+                    <div key={cat.category} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-white text-xs sm:text-sm">{cat.category}</span>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                          {cat.pct}% del almacén
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[11px] font-mono bg-slate-900/70 p-2 rounded-xl border border-slate-800/80">
+                        <div>
+                          <span className="text-[9px] text-slate-400 block">Unidades</span>
+                          <strong className="text-white">{cat.units} unds</strong>
+                          <span className="text-[9px] text-slate-500 block">{cat.modelsCount} mod.</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 block">Costo Stock</span>
+                          <strong className="text-sky-300">${cat.costUsd.toFixed(0)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 block">Valor PVP</span>
+                          <strong className="text-emerald-400">${cat.retailUsd.toFixed(0)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
         {/* ===================================================================
-            PESTAÑA 5: 🔄 ROTACIÓN POR FECHA DE INGRESO & EFECTIVIDAD DE COMPRAS (80/20)
+            PESTAÑA 5: 🛍️ COMPRAS 80/20 (EFECTIVIDAD POR COMPRA Y MATRIZ DE SELECCIÓN)
             =================================================================== */}
-        {subTab === 'rotacion' && (() => {
+        {subTab === 'compras' && (() => {
           const rot = kpiData?.rotation || {};
           const gs = rot.globalSummary || {};
           const cohorts = rot.purchaseCohorts || [];
           const catMatrix = rot.categorySelectionMatrix || [];
-          const allProducts = rot.products || [];
 
-          const availableCategories = ['ALL', ...Array.from(new Set(allProducts.map(p => p.category))).sort()];
-
-          // Filtrar y ordenar productos para el explorador individual de rotación
-          let filteredProducts = allProducts.filter(p => {
-            if (rotationCategoryFilter !== 'ALL' && p.category !== rotationCategoryFilter) return false;
-            if (rotationSearch.trim()) {
-              const q = rotationSearch.toLowerCase().trim();
-              if (!p.name.toLowerCase().includes(q) && !p.category.toLowerCase().includes(q) && !p.entryDate.includes(q)) {
-                return false;
-              }
-            }
-            if (rotationFilter === 'STAR') return p.status === 'STAR';
-            if (rotationFilter === 'DEAD_STOCK') return p.status === 'DEAD_STOCK';
-            if (rotationFilter === 'SLOW') return p.status === 'SLOW';
-            if (rotationFilter === 'SOLD_OUT') return p.status === 'SOLD_OUT';
-            if (rotationFilter === 'HIGH_COST') return p.currentStock > 0;
+          const filteredCohorts = cohorts.filter((c) => {
+            if (cohortStatusFilter === 'ALL') return true;
+            if (cohortStatusFilter === 'HEALTHY') return c.status === 'HEALTHY_80_20';
+            if (cohortStatusFilter === 'IN_MATURATION') return c.status === 'IN_MATURATION';
+            if (cohortStatusFilter === 'ALERT') return c.status === 'ALERT_DEAD_STOCK' || c.status === 'WARNING_SLOW';
             return true;
           });
 
-          if (rotationFilter === 'STAR') {
-            filteredProducts.sort((a, b) => b.velocityPerDay - a.velocityPerDay || b.effectivenessPct - a.effectivenessPct);
-          } else if (rotationFilter === 'DEAD_STOCK' || rotationFilter === 'SLOW') {
-            filteredProducts.sort((a, b) => b.remainingCostUsd - a.remainingCostUsd || a.effectivenessPct - b.effectivenessPct);
-          } else if (rotationFilter === 'HIGH_COST') {
-            filteredProducts.sort((a, b) => b.remainingCostUsd - a.remainingCostUsd);
-          } else {
-            filteredProducts.sort((a, b) => b.velocityPerDay - a.velocityPerDay || b.effectivenessPct - a.effectivenessPct);
-          }
+          const filteredMatrix = catMatrix.filter((cat) => {
+            if (matrixRecFilter === 'ALL') return true;
+            return cat.recommendation === matrixRecFilter;
+          });
 
           return (
             <div className="space-y-4">
@@ -1116,15 +1358,23 @@ export default function KpiModule({ bcvRate }) {
                       Mide qué porcentaje de todas las prendas compradas ya se vendió desde su fecha de ingreso al ERP y cuánto capital sigue en percha.
                     </p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-[11px] font-extrabold border shrink-0 self-start sm:self-auto ${
-                    (gs.matureDeadStockPct || 0) <= 20
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                      : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                  }`}>
-                    {(gs.matureDeadStockPct || 0) <= 20
-                      ? `🟢 Compras Maduras en Meta (${gs.matureDeadStockPct || 0}% ≤ 20% máx)`
-                      : `🔴 Merma en Compras Maduras: ${gs.matureDeadStockPct || 0}% (Meta ≤ 20%)`}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    <span className={`px-3 py-1 rounded-full text-[11px] font-extrabold border shrink-0 ${
+                      (gs.matureDeadStockPct || 0) <= 20
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                        : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                    }`}>
+                      {(gs.matureDeadStockPct || 0) <= 20
+                        ? `🟢 Compras Maduras en Meta (${gs.matureDeadStockPct || 0}% ≤ 20% máx)`
+                        : `🔴 Merma en Compras Maduras: ${gs.matureDeadStockPct || 0}% (Meta ≤ 20%)`}
+                    </span>
+                    <button
+                      onClick={() => setSubTab('rotacion')}
+                      className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-amber-400 text-slate-950 hover:brightness-110 transition-all cursor-pointer shrink-0"
+                    >
+                      ⏱️ Ir a Explorador de Prendas →
+                    </button>
+                  </div>
                 </div>
 
                 {/* Tarjetas Principales de Efectividad y Capital */}
@@ -1158,9 +1408,17 @@ export default function KpiModule({ bcvRate }) {
                   </div>
 
                   {/* Dead Stock Crítico (+45d / Sin Rotación) */}
-                  <div className="bg-slate-950 p-3.5 rounded-2xl border border-rose-500/30 space-y-1">
-                    <span className="text-[10px] font-bold uppercase text-rose-400 block">
-                      🧊 Dead Stock Crítico (+45 días)
+                  <div
+                    onClick={() => {
+                      setRotationFilter('DEAD_STOCK');
+                      setSubTab('rotacion');
+                    }}
+                    className="bg-slate-950 p-3.5 rounded-2xl border border-rose-500/30 hover:border-rose-400 space-y-1 cursor-pointer transition-all"
+                    title="Toca para ver las prendas en Dead Stock"
+                  >
+                    <span className="text-[10px] font-bold uppercase text-rose-400 flex items-center justify-between">
+                      <span>🧊 Dead Stock Crítico (+45d)</span>
+                      <span className="underline text-[9px]">Ver →</span>
                     </span>
                     <div className="text-2xl font-black font-mono text-rose-400">
                       {gs.deadStockOverInitialPct || 0}% <span className="text-xs font-normal text-rose-300">del total comprado</span>
@@ -1222,23 +1480,42 @@ export default function KpiModule({ bcvRate }) {
 
               {/* 2. AUDITORÍA POR LOTES DE COMPRA (AGRUPADOS POR FECHA DE INGRESO AL INVENTARIO) */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
                     <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
                       <Calendar className="w-4 h-4 text-amber-400" />
                       <span>Efectividad por Lote de Compra (Agrupado por Fecha de Ingreso)</span>
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      Cada bloque agrupa las prendas que entraron juntas en una misma compra. Toca cualquier compra para ver qué categorías y prendas funcionaron o se estancaron.
+                      Cada bloque agrupa las prendas que entraron juntas en una misma compra. Toca cualquier compra para auditar sus categorías y modelos.
                     </p>
                   </div>
-                  <span className="text-[11px] font-mono text-slate-400 shrink-0">
-                    {cohorts.length} compras detectadas
-                  </span>
+
+                  {/* Filtro rápido de Lotes de Compra */}
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    {[
+                      { id: 'ALL', label: `Todas (${cohorts.length})` },
+                      { id: 'HEALTHY', label: '🟢 En Meta (≤20%)' },
+                      { id: 'IN_MATURATION', label: '🔵 En Ciclo (<45d)' },
+                      { id: 'ALERT', label: '🔴 Con Alerta (>20%)' }
+                    ].map((cf) => (
+                      <button
+                        key={cf.id}
+                        onClick={() => setCohortStatusFilter(cf.id)}
+                        className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                          cohortStatusFilter === cf.id
+                            ? 'bg-amber-400 text-slate-950 border-amber-400'
+                            : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        {cf.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2.5">
-                  {cohorts.map((cohort) => {
+                  {filteredCohorts.map((cohort) => {
                     const isExpanded = expandedCohortId === cohort.id;
                     let badgeStyle = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
                     let badgeText = '🟢 Meta Cumplida (≤20% Merma)';
@@ -1253,6 +1530,19 @@ export default function KpiModule({ bcvRate }) {
                       badgeText = `🔴 Exceso Dead Stock (${cohort.deadStockPct}% > 20%)`;
                     }
 
+                    const rawCohortModels = cohort.models || [];
+                    const filteredCohortModels = rawCohortModels.filter((m) => {
+                      if (cohortModelStatusFilter !== 'ALL' && m.status !== cohortModelStatusFilter) return false;
+                      if (cohortModelSearch.trim()) {
+                        const q = cohortModelSearch.toLowerCase().trim();
+                        return m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q);
+                      }
+                      return true;
+                    });
+                    const visibleCohortModels = (showAllCohortModels || cohortModelSearch.trim() || cohortModelStatusFilter !== 'ALL')
+                      ? filteredCohortModels
+                      : filteredCohortModels.slice(0, 12);
+
                     return (
                       <div
                         key={cohort.id}
@@ -1260,7 +1550,16 @@ export default function KpiModule({ bcvRate }) {
                       >
                         {/* Cabecera clickeable de la Compra */}
                         <div
-                          onClick={() => setExpandedCohortId(isExpanded ? null : cohort.id)}
+                          onClick={() => {
+                            if (isExpanded) {
+                              setExpandedCohortId(null);
+                            } else {
+                              setExpandedCohortId(cohort.id);
+                              setCohortModelSearch('');
+                              setCohortModelStatusFilter('ALL');
+                              setShowAllCohortModels(false);
+                            }
+                          }}
                           className="p-3.5 sm:p-4 cursor-pointer hover:bg-slate-900/60 transition-colors space-y-2.5"
                         >
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1339,9 +1638,9 @@ export default function KpiModule({ bcvRate }) {
                           </div>
                         </div>
 
-                        {/* Detalle Expandible de la Compra: Mix de Categorías y Modelos del Lote */}
+                        {/* Detalle Expandible de la Compra: Mix de Categorías y Modelos del Lote (CON BUSCADOR Y TOP 12) */}
                         {isExpanded && (
-                          <div className="border-t border-slate-800 bg-slate-900/50 p-3.5 sm:p-4 space-y-3 animate-fade-in">
+                          <div className="border-t border-slate-800 bg-slate-900/50 p-3.5 sm:p-4 space-y-3.5 animate-fade-in">
                             {/* Mix de categorías en esta compra */}
                             <div>
                               <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-amber-400 mb-2">
@@ -1372,28 +1671,85 @@ export default function KpiModule({ bcvRate }) {
                               </div>
                             </div>
 
-                            {/* Lista de modelos de esta compra */}
-                            <div>
-                              <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400 mb-2">
-                                👕 Prendas de esta Compra (Ordenadas de Mayor a Menor Efectividad):
-                              </h4>
-                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 no-scrollbar">
-                                {(cohort.models || []).map((m, mIdx) => (
+                            {/* Lista de modelos de esta compra con buscador y filtro de semáforo */}
+                            <div className="space-y-2.5">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400">
+                                  👕 Prendas de esta Compra ({filteredCohortModels.length} modelos):
+                                </h4>
+
+                                {/* Buscador interno del lote + botón Ver todas */}
+                                <div className="flex items-center space-x-2">
+                                  <div className="relative flex-1 sm:w-56">
+                                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                    <input
+                                      type="text"
+                                      value={cohortModelSearch}
+                                      onChange={(e) => setCohortModelSearch(e.target.value)}
+                                      placeholder="Buscar en esta compra..."
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-6 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                                    />
+                                    {cohortModelSearch && (
+                                      <button
+                                        onClick={() => setCohortModelSearch('')}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  {filteredCohortModels.length > 12 && (
+                                    <button
+                                      onClick={() => setShowAllCohortModels(!showAllCohortModels)}
+                                      className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30 hover:bg-sky-500/25 cursor-pointer shrink-0"
+                                    >
+                                      {showAllCohortModels ? 'Compactar (Top 12)' : `Ver todos (${filteredCohortModels.length})`}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Filtros rápidos de estado dentro del lote */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {[
+                                  { id: 'ALL', label: 'Todas' },
+                                  { id: 'STAR', label: '🔥 Estrellas' },
+                                  { id: 'HEALTHY', label: '✅ Saludables' },
+                                  { id: 'SLOW', label: '⚠️ Lentas' },
+                                  { id: 'DEAD_STOCK', label: '🧊 Dead Stock' },
+                                  { id: 'SOLD_OUT', label: '🏁 Agotadas' }
+                                ].map((st) => (
+                                  <button
+                                    key={st.id}
+                                    onClick={() => setCohortModelStatusFilter(st.id)}
+                                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border cursor-pointer transition-all ${
+                                      cohortModelStatusFilter === st.id
+                                        ? 'bg-sky-400 text-slate-950 border-sky-400'
+                                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                                    }`}
+                                  >
+                                    {st.label}
+                                  </button>
+                                ))}
+                              </div>
+
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                                {visibleCohortModels.map((m, mIdx) => (
                                   <div key={mIdx} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1.5">
-                                    <div className="flex items-center space-x-2">
-                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 uppercase">
+                                    <div className="flex items-center space-x-2 min-w-0">
+                                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 uppercase shrink-0">
                                         {m.category}
                                       </span>
-                                      <span className="font-bold text-white">{m.name}</span>
-                                      <span className="text-[10px] text-slate-400 font-mono">
-                                        ({m.daysSinceLastSale === 0 ? 'Vendió hoy' : m.lastSaleDate ? `Últ. venta hace ${m.daysSinceLastSale}d` : 'Sin ventas aún'})
+                                      <span className="font-bold text-white truncate">{m.name}</span>
+                                      <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                        ({m.daysSinceLastSale === 0 ? 'Hoy' : m.lastSaleDate ? `Hace ${m.daysSinceLastSale}d` : '0 vtas'})
                                       </span>
                                     </div>
-                                    <div className="flex items-center space-x-3 font-mono text-[11px] self-end sm:self-auto">
+                                    <div className="flex items-center space-x-2.5 font-mono text-[11px] self-end sm:self-auto shrink-0">
                                       <span className="text-slate-300">
-                                        <strong className="text-emerald-400">{m.soldUnits}</strong>/{m.initialUnits} vend. (Stock: <strong className="text-amber-300">{m.currentStock}</strong>)
+                                        <strong className="text-emerald-400">{m.soldUnits}</strong>/{m.initialUnits} (Stock: <strong className="text-amber-300">{m.currentStock}</strong>)
                                       </span>
-                                      <span className="text-sky-300">{m.velocityPerDay}/día</span>
+                                      <span className="text-sky-300">{m.velocityPerDay}/d</span>
                                       <span className={`font-black px-2 py-0.5 rounded-lg ${
                                         m.effectivenessPct >= 80
                                           ? 'bg-emerald-500/15 text-emerald-300'
@@ -1401,7 +1757,7 @@ export default function KpiModule({ bcvRate }) {
                                             ? 'bg-amber-500/15 text-amber-300'
                                             : 'bg-rose-500/15 text-rose-300'
                                       }`}>
-                                        {m.effectivenessPct}% efect.
+                                        {m.effectivenessPct}%
                                       </span>
                                     </div>
                                   </div>
@@ -1418,18 +1774,42 @@ export default function KpiModule({ bcvRate }) {
 
               {/* 3. MATRIZ DE AJUSTE DE SELECCIÓN POR CATEGORÍA (¿QUÉ COMPRAR MÁS Y QUÉ COMPRAR MENOS?) */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
-                <div>
-                  <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
-                    <Layers className="w-4 h-4 text-amber-400" />
-                    <span>Matriz de Selección de Compra por Categoría (Guía para Futuras Compras)</span>
-                  </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Compara cuánto volumen destinaste a cada categoría en las compras vs cuánto rota realmente, para saber qué categorías potenciar y cuáles recortar para no pasar del 20% de dead stock.
-                  </p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
+                      <Layers className="w-4 h-4 text-amber-400" />
+                      <span>Matriz de Selección de Compra por Categoría (Guía para Futuras Compras)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Compara cuánto volumen destinaste a cada categoría vs cuánto rota realmente. Toca cualquier categoría para ver sus prendas en Rotación.
+                    </p>
+                  </div>
+
+                  {/* Filtro rápido por recomendación */}
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    {[
+                      { id: 'ALL', label: `Todas (${catMatrix.length})` },
+                      { id: 'BUY_MORE', label: '🚀 Priorizar / Comprar Más' },
+                      { id: 'BALANCED', label: '✅ Equilibradas' },
+                      { id: 'BUY_LESS', label: '⚠️ Reducir / Ajustar' }
+                    ].map((rf) => (
+                      <button
+                        key={rf.id}
+                        onClick={() => setMatrixRecFilter(rf.id)}
+                        className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                          matrixRecFilter === rf.id
+                            ? 'bg-amber-400 text-slate-950 border-amber-400'
+                            : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        {rf.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                  {catMatrix.map((cat, idx) => {
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {filteredMatrix.map((cat, idx) => {
                     let recBadge = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
                     let recIcon = '🚀 Priorizar / Comprar Más';
                     if (cat.recommendation === 'BALANCED') {
@@ -1441,11 +1821,20 @@ export default function KpiModule({ bcvRate }) {
                     }
 
                     return (
-                      <div key={idx} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setRotationCategoryFilter(cat.category);
+                          setRotationFilter('ALL');
+                          setSubTab('rotacion');
+                        }}
+                        className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 hover:border-amber-500/40 space-y-2 cursor-pointer transition-all"
+                        title={`Toca para auditar las prendas de ${cat.category} en Rotación`}
+                      >
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <span className="font-black text-white text-sm">{cat.category}</span>
-                            <span className="text-[10px] text-slate-400 font-mono ml-2">({cat.modelsCount} modelos)</span>
+                            <span className="text-[10px] text-slate-400 font-mono ml-1.5">({cat.modelsCount} mod.)</span>
                           </div>
                           <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${recBadge}`}>
                             {recIcon}
@@ -1454,17 +1843,17 @@ export default function KpiModule({ bcvRate }) {
 
                         <div className="grid grid-cols-3 gap-2 text-[11px] font-mono bg-slate-900/70 p-2 rounded-xl border border-slate-800/80">
                           <div>
-                            <span className="text-[10px] text-slate-400 block">% de tu Compra</span>
+                            <span className="text-[10px] text-slate-400 block">% Compra</span>
                             <strong className="text-white">{cat.shareOfPurchasePct}%</strong>
                             <span className="text-[10px] text-slate-500 block">{cat.initialUnits} unds</span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-slate-400 block">% de tu Venta</span>
+                            <span className="text-[10px] text-slate-400 block">% Venta</span>
                             <strong className="text-emerald-400">{cat.shareOfSalesPct}%</strong>
                             <span className="text-[10px] text-slate-500 block">{cat.soldUnits} unds</span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-slate-400 block">Efectividad / Merma</span>
+                            <span className="text-[10px] text-slate-400 block">Efectividad</span>
                             <strong className={cat.effectivenessPct >= 75 ? 'text-emerald-400' : cat.effectivenessPct >= 55 ? 'text-amber-300' : 'text-rose-400'}>
                               {cat.effectivenessPct}%
                             </strong>
@@ -1474,10 +1863,10 @@ export default function KpiModule({ bcvRate }) {
 
                         <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
                           <span>
-                            Stock actual: <strong className="text-amber-300">{cat.currentStock} unds</strong> (Costo: ${cat.remainingCostUsd.toFixed(2)})
+                            Stock: <strong className="text-amber-300">{cat.currentStock} unds</strong> (${cat.remainingCostUsd.toFixed(0)})
                           </span>
-                          <span>
-                            Recuperación Costo: <strong className="text-emerald-400">{cat.costRecoveryPct}%</strong>
+                          <span className="text-amber-400 font-bold">
+                            Ver prendas →
                           </span>
                         </div>
                       </div>
@@ -1486,157 +1875,387 @@ export default function KpiModule({ bcvRate }) {
                 </div>
               </div>
 
-              {/* 4. EXPLORADOR DE ROTACIÓN INDIVIDUAL POR PRENDA DESDE SU INGRESO */}
+            </div>
+          );
+        })()}
+
+        {/* ===================================================================
+            PESTAÑA 6: ⏱️ EXPLORADOR DEDICADO DE ROTACIÓN POR PRENDA (SIN SCROLL INFINITO)
+            =================================================================== */}
+        {subTab === 'rotacion' && (() => {
+          const rot = kpiData?.rotation || {};
+          const gs = rot.globalSummary || {};
+          const allProducts = rot.products || [];
+
+          const healthyCount = allProducts.filter(p => p.status === 'HEALTHY').length;
+
+          // Conteo por categoría para los chips rápidos
+          const catCounts = {};
+          allProducts.forEach((p) => {
+            catCounts[p.category] = (catCounts[p.category] || 0) + 1;
+          });
+          const availableCategories = ['ALL', ...Object.keys(catCounts).sort((a, b) => catCounts[b] - catCounts[a])];
+
+          // Filtrar productos según Semáforo, Categoría y Buscador
+          let filteredProducts = allProducts.filter((p) => {
+            if (rotationCategoryFilter !== 'ALL' && p.category !== rotationCategoryFilter) return false;
+            if (rotationSearch.trim()) {
+              const q = rotationSearch.toLowerCase().trim();
+              if (!p.name.toLowerCase().includes(q) && !p.category.toLowerCase().includes(q) && !p.entryDate.includes(q)) {
+                return false;
+              }
+            }
+            if (rotationFilter === 'STAR') return p.status === 'STAR';
+            if (rotationFilter === 'HEALTHY') return p.status === 'HEALTHY';
+            if (rotationFilter === 'DEAD_STOCK') return p.status === 'DEAD_STOCK';
+            if (rotationFilter === 'SLOW') return p.status === 'SLOW';
+            if (rotationFilter === 'SOLD_OUT') return p.status === 'SOLD_OUT';
+            if (rotationFilter === 'HIGH_COST') return p.currentStock > 0;
+            return true;
+          });
+
+          // Ordenamiento explícito elegido por el usuario
+          filteredProducts.sort((a, b) => {
+            if (rotationSortBy === 'VELOCITY_DESC') {
+              return b.velocityPerDay - a.velocityPerDay || b.effectivenessPct - a.effectivenessPct;
+            }
+            if (rotationSortBy === 'EFFECTIVENESS_DESC') {
+              return b.effectivenessPct - a.effectivenessPct || b.velocityPerDay - a.velocityPerDay;
+            }
+            if (rotationSortBy === 'EFFECTIVENESS_ASC') {
+              return a.effectivenessPct - b.effectivenessPct || b.remainingCostUsd - a.remainingCostUsd;
+            }
+            if (rotationSortBy === 'CAPITAL_DESC') {
+              return b.remainingCostUsd - a.remainingCostUsd || a.effectivenessPct - b.effectivenessPct;
+            }
+            if (rotationSortBy === 'STALE_DESC') {
+              const aStale = a.currentStock > 0 ? (a.daysSinceLastSale ?? a.daysInInventory) : -1;
+              const bStale = b.currentStock > 0 ? (b.daysSinceLastSale ?? b.daysInInventory) : -1;
+              return bStale - aStale || b.remainingCostUsd - a.remainingCostUsd;
+            }
+            if (rotationSortBy === 'RECENT_DESC') {
+              return b.entryDate.localeCompare(a.entryDate) || b.velocityPerDay - a.velocityPerDay;
+            }
+            return b.velocityPerDay - a.velocityPerDay;
+          });
+
+          // Paginación inteligente: Mostrar Top 16 por defecto salvo que busque o active "Ver todos"
+          const isSearching = rotationSearch.trim().length > 0;
+          const visibleProducts = (showAllRotationProducts || isSearching)
+            ? filteredProducts
+            : filteredProducts.slice(0, 16);
+
+          return (
+            <div className="space-y-4">
+
+              {/* 1. TARJETAS INTERACTIVAS DE SEMÁFORO DE ROTACIÓN (1-TAP FILTERS) */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                {[
+                  {
+                    id: 'ALL',
+                    title: '📦 Todas las Prendas',
+                    count: allProducts.length,
+                    sub: `${gs.globalEffectivenessPct || 0}% efect. global`,
+                    activeClass: 'bg-amber-500/20 border-amber-400 ring-1 ring-amber-400/50',
+                    baseClass: 'bg-slate-900/90 border-slate-800 hover:border-slate-700',
+                    textClass: 'text-white',
+                    defaultSort: 'VELOCITY_DESC'
+                  },
+                  {
+                    id: 'STAR',
+                    title: '🔥 Top Estrellas',
+                    count: gs.starModelsCount || 0,
+                    sub: 'Alta velocidad / repetir',
+                    activeClass: 'bg-amber-500/25 border-amber-400 ring-1 ring-amber-400/50',
+                    baseClass: 'bg-slate-900/90 border-amber-500/30 hover:border-amber-400/60',
+                    textClass: 'text-amber-400',
+                    defaultSort: 'VELOCITY_DESC'
+                  },
+                  {
+                    id: 'HEALTHY',
+                    title: '✅ Saludables',
+                    count: healthyCount,
+                    sub: 'Rotación firme en ciclo',
+                    activeClass: 'bg-emerald-500/25 border-emerald-400 ring-1 ring-emerald-400/50',
+                    baseClass: 'bg-slate-900/90 border-emerald-500/30 hover:border-emerald-400/60',
+                    textClass: 'text-emerald-400',
+                    defaultSort: 'EFFECTIVENESS_DESC'
+                  },
+                  {
+                    id: 'SLOW',
+                    title: '⚠️ Rotación Lenta',
+                    count: gs.slowModelsCount || 0,
+                    sub: 'Impulsar en piso / redes',
+                    activeClass: 'bg-orange-500/25 border-orange-400 ring-1 ring-orange-400/50',
+                    baseClass: 'bg-slate-900/90 border-orange-500/30 hover:border-orange-400/60',
+                    textClass: 'text-orange-400',
+                    defaultSort: 'CAPITAL_DESC'
+                  },
+                  {
+                    id: 'DEAD_STOCK',
+                    title: '🧊 Dead Stock',
+                    count: gs.deadStockModelsCount || 0,
+                    sub: `$${(gs.deadStockCostUsd || 0).toFixed(0)} costo retenido`,
+                    activeClass: 'bg-rose-500/25 border-rose-400 ring-1 ring-rose-400/50',
+                    baseClass: 'bg-slate-900/90 border-rose-500/30 hover:border-rose-400/60',
+                    textClass: 'text-rose-400',
+                    defaultSort: 'CAPITAL_DESC'
+                  },
+                  {
+                    id: 'SOLD_OUT',
+                    title: '🏁 Agotadas 100%',
+                    count: gs.soldOutModelsCount || 0,
+                    sub: 'Éxito total (0 en percha)',
+                    activeClass: 'bg-sky-500/25 border-sky-400 ring-1 ring-sky-400/50',
+                    baseClass: 'bg-slate-900/90 border-sky-500/30 hover:border-sky-400/60',
+                    textClass: 'text-sky-400',
+                    defaultSort: 'VELOCITY_DESC'
+                  }
+                ].map((card) => (
+                  <button
+                    key={card.id}
+                    onClick={() => {
+                      setRotationFilter(card.id);
+                      setRotationSortBy(card.defaultSort);
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                      rotationFilter === card.id ? card.activeClass : card.baseClass
+                    }`}
+                  >
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 block truncate">
+                      {card.title}
+                    </span>
+                    <div className={`text-xl font-black font-mono mt-0.5 ${card.textClass}`}>
+                      {card.count} <span className="text-[10px] font-normal text-slate-400">mod.</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono block truncate mt-0.5">
+                      {card.sub}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* 2. BARRA DE CONTROL DE ROTACIÓN: BUSCADOR + CHIPS DE CATEGORÍA + ORDENAMIENTO + PAGINACIÓN */}
               <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
-                      <Package className="w-4 h-4 text-amber-400" />
-                      <span>Rotación por Prenda desde su Fecha de Ingreso ({filteredProducts.length} modelos)</span>
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      Velocidad diaria/semanal, días en inventario, días sin vender, cobertura y capital retenido por prenda.
-                    </p>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  {/* Buscador prominente con botón limpiar */}
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-amber-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={rotationSearch}
+                      onChange={(e) => setRotationSearch(e.target.value)}
+                      placeholder="Buscar producto específico, categoría o fecha de ingreso (ej. azzaro, set, 2026-09)..."
+                      className="w-full bg-slate-950 border border-slate-700/80 rounded-2xl pl-10 pr-9 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 shadow-inner"
+                    />
+                    {rotationSearch && (
+                      <button
+                        onClick={() => setRotationSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                        title="Limpiar búsqueda"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* Buscador rápido */}
-                  <input
-                    type="text"
-                    value={rotationSearch}
-                    onChange={(e) => setRotationSearch(e.target.value)}
-                    placeholder="Buscar prenda o fecha (ej. azzaro, 2026-09)..."
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 sm:w-64"
-                  />
+                  {/* Controles derecha: Ordenar por + Botón Ver Todos / Top 16 */}
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-2xl px-3 py-2">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-[11px] font-bold text-slate-400">Ordenar:</span>
+                      <select
+                        value={rotationSortBy}
+                        onChange={(e) => setRotationSortBy(e.target.value)}
+                        className="bg-transparent text-xs font-extrabold text-white focus:outline-none cursor-pointer"
+                      >
+                        <option value="VELOCITY_DESC" className="bg-slate-900">⚡ Mayor Velocidad (/día)</option>
+                        <option value="EFFECTIVENESS_DESC" className="bg-slate-900">📈 Mayor % Efectividad</option>
+                        <option value="EFFECTIVENESS_ASC" className="bg-slate-900">📉 Menor % Efectividad</option>
+                        <option value="CAPITAL_DESC" className="bg-slate-900">💰 Mayor Capital en Percha ($)</option>
+                        <option value="STALE_DESC" className="bg-slate-900">🕒 Más Días sin Vender</option>
+                        <option value="RECENT_DESC" className="bg-slate-900">📅 Ingreso Más Reciente</option>
+                      </select>
+                    </div>
+
+                    {filteredProducts.length > 16 && !isSearching && (
+                      <button
+                        onClick={() => setShowAllRotationProducts(!showAllRotationProducts)}
+                        className={`px-3.5 py-2 rounded-2xl text-xs font-extrabold border transition-all flex items-center space-x-1.5 cursor-pointer ${
+                          showAllRotationProducts
+                            ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-md'
+                            : 'bg-slate-950 text-amber-400 border-amber-500/40 hover:bg-amber-500/15'
+                        }`}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>
+                          {showAllRotationProducts
+                            ? 'Compactar a Top 16'
+                            : `Ver todos (${filteredProducts.length})`}
+                        </span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Botones de Filtro por Semáforo de Rotación */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[
-                    { id: 'ALL', label: `📦 Todas (${allProducts.length})` },
-                    { id: 'STAR', label: `🔥 Alta Rotación (${gs.starModelsCount || 0})` },
-                    { id: 'DEAD_STOCK', label: `🧊 Dead Stock / Estancadas (${gs.deadStockModelsCount || 0})` },
-                    { id: 'SLOW', label: `⚠️ Rotación Lenta (${gs.slowModelsCount || 0})` },
-                    { id: 'HIGH_COST', label: '💰 Mayor Capital en Percha' },
-                    { id: 'SOLD_OUT', label: `🏁 Agotadas 100% (${gs.soldOutModelsCount || 0})` }
-                  ].map(f => (
+                {/* Chips Rápidos de Categoría (1-Tap) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                  {availableCategories.map((cat) => (
                     <button
-                      key={f.id}
-                      onClick={() => setRotationFilter(f.id)}
-                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
-                        rotationFilter === f.id
+                      key={cat}
+                      onClick={() => setRotationCategoryFilter(cat)}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-bold shrink-0 border transition-all cursor-pointer ${
+                        rotationCategoryFilter === cat
                           ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-sm'
                           : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      {f.label}
+                      {cat === 'ALL' ? `Todas las Categorías (${allProducts.length})` : `${cat} (${catCounts[cat] || 0})`}
                     </button>
                   ))}
-
-                  {/* Selector de Categoría */}
-                  <select
-                    value={rotationCategoryFilter}
-                    onChange={(e) => setRotationCategoryFilter(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] font-bold text-slate-200 focus:outline-none focus:border-amber-400 ml-auto"
-                  >
-                    {availableCategories.map(cat => (
-                      <option key={cat} value={cat}>
-                        {cat === 'ALL' ? 'Categoría: Todas' : cat}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
-                {/* Lista de Prendas con Métricas de Rotación */}
-                <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1 no-scrollbar">
-                  {filteredProducts.map((p, idx) => {
-                    let statusBadge = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
-                    let statusLabel = '✅ Saludable';
-                    if (p.status === 'STAR') {
-                      statusBadge = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-                      statusLabel = '🔥 Estrella / Alta Rotación';
-                    } else if (p.status === 'DEAD_STOCK') {
-                      statusBadge = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
-                      statusLabel = '🧊 Dead Stock / Estancado';
-                    } else if (p.status === 'SLOW') {
-                      statusBadge = 'bg-orange-500/20 text-orange-300 border-orange-500/40';
-                      statusLabel = '⚠️ Rotación Lenta';
-                    } else if (p.status === 'SOLD_OUT') {
-                      statusBadge = 'bg-sky-500/20 text-sky-300 border-sky-500/40';
-                      statusLabel = '🏁 Agotado 100%';
-                    }
+                {/* Barra de estado de resultados filtrados */}
+                <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80 gap-2">
+                  <span>
+                    Mostrando <strong className="text-white font-mono">{visibleProducts.length}</strong> de <strong className="text-amber-400 font-mono">{filteredProducts.length}</strong> prendas
+                    {rotationFilter !== 'ALL' && ` • Filtro: ${rotationFilter}`}
+                    {rotationCategoryFilter !== 'ALL' && ` • Categoría: ${rotationCategoryFilter}`}
+                  </span>
+                  {(rotationFilter !== 'ALL' || rotationCategoryFilter !== 'ALL' || rotationSearch) && (
+                    <button
+                      onClick={() => {
+                        setRotationFilter('ALL');
+                        setRotationCategoryFilter('ALL');
+                        setRotationSearch('');
+                      }}
+                      className="text-xs font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                    >
+                      Restablecer todos los filtros
+                    </button>
+                  )}
+                </div>
 
-                    return (
-                      <div key={p.id || idx} className="bg-slate-950 p-3 rounded-2xl border border-slate-800/90 space-y-2">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                          <div className="space-y-0.5">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
-                                {p.category}
-                              </span>
-                              <span className="font-extrabold text-white text-xs sm:text-sm">{p.name}</span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadge}`}>
+                {/* 3. GRILLA DE PRENDAS EN 2 COLUMNAS EN DESKTOP (SIN DOBLE SCROLL ATRAPADO) */}
+                {visibleProducts.length === 0 ? (
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 text-center space-y-2">
+                    <p className="text-sm font-bold text-slate-300">No se encontraron prendas con esos filtros.</p>
+                    <button
+                      onClick={() => {
+                        setRotationFilter('ALL');
+                        setRotationCategoryFilter('ALL');
+                        setRotationSearch('');
+                      }}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-400 text-slate-950 cursor-pointer"
+                    >
+                      Ver todas las prendas
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {visibleProducts.map((p, idx) => {
+                      let statusBadge = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+                      let statusLabel = '✅ Saludable';
+                      if (p.status === 'STAR') {
+                        statusBadge = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+                        statusLabel = '🔥 Estrella';
+                      } else if (p.status === 'DEAD_STOCK') {
+                        statusBadge = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+                        statusLabel = '🧊 Dead Stock';
+                      } else if (p.status === 'SLOW') {
+                        statusBadge = 'bg-orange-500/20 text-orange-300 border-orange-500/40';
+                        statusLabel = '⚠️ Lenta';
+                      } else if (p.status === 'SOLD_OUT') {
+                        statusBadge = 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+                        statusLabel = '🏁 Agotada 100%';
+                      }
+
+                      return (
+                        <div key={p.id || idx} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800/90 hover:border-slate-700 space-y-2.5 transition-all flex flex-col justify-between">
+                          <div className="space-y-1.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                                    {p.category}
+                                  </span>
+                                  <span className="font-extrabold text-white text-xs sm:text-sm truncate">{p.name}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  📥 Ingresó: <strong className="text-slate-200">{p.entryDate}</strong> ({p.daysInInventory}d)
+                                  {' • '}
+                                  {p.lastSaleDate
+                                    ? `🕒 Últ. venta: hace ${p.daysSinceLastSale}d (${p.lastSaleDate})`
+                                    : '⚠️ Sin ventas'}
+                                </div>
+                              </div>
+
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 ${statusBadge}`}>
                                 {statusLabel}
                               </span>
                             </div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              📥 Ingresó: <strong className="text-slate-200">{p.entryDate}</strong> ({p.daysInInventory} días en tienda)
-                              {' • '}
-                              {p.lastSaleDate
-                                ? `🕒 Última venta: ${p.lastSaleDate} (hace ${p.daysSinceLastSale}d)`
-                                : '⚠️ Sin ventas registradas'}
+
+                            {/* Barra visual de efectividad de la prenda */}
+                            <div className="flex items-center space-x-2">
+                              <div className="h-1.5 flex-1 bg-slate-900 rounded-full overflow-hidden">
+                                <div
+                                  style={{ width: `${Math.min(100, p.effectivenessPct)}%` }}
+                                  className={`h-full ${
+                                    p.effectivenessPct >= 80 ? 'bg-emerald-400' : p.effectivenessPct >= 60 ? 'bg-amber-400' : 'bg-rose-500'
+                                  }`}
+                                />
+                              </div>
+                              <span className={`text-xs font-black font-mono shrink-0 ${
+                                p.effectivenessPct >= 80 ? 'text-emerald-400' : p.effectivenessPct >= 60 ? 'text-amber-300' : 'text-rose-400'
+                              }`}>
+                                {p.effectivenessPct}% efect.
+                              </span>
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-3 font-mono text-xs sm:text-right shrink-0">
+                          <div className="grid grid-cols-4 gap-1.5 text-[11px] font-mono bg-slate-900/60 p-2 rounded-xl border border-slate-800/70">
                             <div>
-                              <span className="text-[10px] text-slate-400 block">Efectividad</span>
-                              <strong className={p.effectivenessPct >= 80 ? 'text-emerald-400' : p.effectivenessPct >= 60 ? 'text-amber-300' : 'text-rose-400'}>
-                                {p.effectivenessPct}%
+                              <span className="text-[9px] text-slate-400 block">Lote → Vend.</span>
+                              <strong className="text-white">{p.initialUnits}</strong> → <strong className="text-emerald-400">{p.soldUnits}</strong>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 block">En Percha</span>
+                              <strong className={p.remainingPct <= 20 ? 'text-emerald-400' : 'text-amber-300'}>
+                                {p.currentStock} ({p.remainingPct}%)
                               </strong>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-400 block">Velocidad</span>
+                              <span className="text-[9px] text-slate-400 block">Ritmo / Cob.</span>
                               <strong className="text-sky-300">{p.velocityPerDay}/d</strong>
-                              <span className="text-[10px] text-slate-500 block">({p.velocityPerWeek}/sem)</span>
+                              <span className="text-[9px] text-slate-400 block">
+                                {p.currentStock === 0 ? '0d' : p.daysOfSupply >= 999 ? '∞' : `~${p.daysOfSupply}d`}
+                              </span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-400 block">Cobertura</span>
-                              <strong className="text-white">
-                                {p.currentStock === 0 ? '0d' : p.daysOfSupply >= 999 ? '∞' : `~${p.daysOfSupply}d`}
-                              </strong>
+                              <span className="text-[9px] text-slate-400 block">Costo Retenido</span>
+                              <strong className="text-rose-300">${p.remainingCostUsd.toFixed(0)}</strong>
+                              <span className="text-[9px] text-emerald-400 block">ROI {p.costRecoveryPct}%</span>
                             </div>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono bg-slate-900/60 p-2 rounded-xl border border-slate-800/70">
-                          <div>
-                            <span className="text-[10px] text-slate-400 block">Lote Inicial → Vendidas</span>
-                            <strong className="text-white">{p.initialUnits}</strong> → <strong className="text-emerald-400">{p.soldUnits} vend.</strong>
-                            {p.periodSoldUnits > 0 && (
-                              <span className="text-[10px] text-amber-300 block">({p.periodSoldUnits} en el período)</span>
-                            )}
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-400 block">Stock Actual Restante</span>
-                            <strong className={p.remainingPct <= 20 ? 'text-emerald-400' : 'text-amber-300'}>
-                              {p.currentStock} unds ({p.remainingPct}%)
-                            </strong>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-400 block">Capital Retenido (Costo / PVP)</span>
-                            <strong className="text-rose-300">${p.remainingCostUsd.toFixed(2)}</strong>
-                            <span className="text-slate-400"> / ${p.remainingRetailUsd.toFixed(2)}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-400 block">Facturado Histórico (ROI)</span>
-                            <strong className="text-emerald-400">${p.revenueUsd.toFixed(2)}</strong>
-                            <span className="text-slate-400"> ({p.costRecoveryPct}%)</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* Botón inferior para expandir o compactar la lista sin scroll infinito */}
+                {filteredProducts.length > 16 && !isSearching && (
+                  <div className="pt-2 flex justify-center">
+                    <button
+                      onClick={() => setShowAllRotationProducts(!showAllRotationProducts)}
+                      className="px-5 py-2.5 rounded-2xl text-xs font-extrabold bg-slate-950 hover:bg-slate-800 text-amber-400 border border-amber-500/30 transition-all cursor-pointer shadow-lg"
+                    >
+                      {showAllRotationProducts
+                        ? '⬆ Mostrar solo el Top 16 de este filtro'
+                        : `⬇ Ver los ${filteredProducts.length} modelos de este filtro (${filteredProducts.length - 16} más)`}
+                    </button>
+                  </div>
+                )}
               </div>
 
             </div>

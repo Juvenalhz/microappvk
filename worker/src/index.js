@@ -2126,16 +2126,63 @@ function processKpiData(billsResult, catalog, bcvData) {
     };
   }).sort((a, b) => b.date.localeCompare(a.date)); // Ordenar del más reciente al más antiguo
 
-  // Balance de stock en almacén (excluyendo bolsas, cajas, correcciones y accesorios comodín)
+  // Balance de stock en almacén, curva de tallas y desglose por categoría (excluyendo bolsas, cajas, correcciones y accesorios comodín)
   const stock = { SUPERIOR: 0, INFERIOR: 0, CONJUNTO: 0, OTRO: 0 };
+  const sizeCurveMap = new Map();
+  const stockCatMap = new Map();
+
   if (Array.isArray(catalog)) {
     for (const model of catalog) {
       const group = classifyGarment(model.categoria, model.nombre);
       if (!group) continue;
-      stock[group] += Math.max(0, Number(model.total_stock || 0));
+      const mStock = Math.max(0, Number(model.total_stock || 0));
+      stock[group] += mStock;
+
+      const commCat = resolveCommercialCategory(model.categoria, model.nombre);
+      const unitCost = Number(model.costo_unitario) > 0 ? Number(model.costo_unitario) : (Number(model.precio_usd || 0) * 0.35);
+      const catEntry = stockCatMap.get(commCat) || {
+        category: commCat,
+        group,
+        modelsCount: 0,
+        availableModelsCount: 0,
+        units: 0,
+        costValueUsd: 0,
+        retailValueUsd: 0
+      };
+      catEntry.modelsCount += 1;
+      if (mStock > 0) catEntry.availableModelsCount += 1;
+      catEntry.units += mStock;
+      catEntry.costValueUsd = r2(catEntry.costValueUsd + mStock * unitCost);
+      catEntry.retailValueUsd = r2(catEntry.retailValueUsd + mStock * Number(model.precio_usd || 0));
+      stockCatMap.set(commCat, catEntry);
+
+      // Contar curva de tallas disponibles (stock > 0)
+      const seenSizesInModel = new Set();
+      for (const cGroup of (model.colores || [])) {
+        for (const tObj of (cGroup.tallas || [])) {
+          const qty = Number(tObj.stock || 0);
+          if (qty <= 0) continue;
+          const sName = (tObj.talla || 'ÚNICA').toString().toUpperCase().trim();
+          const sEntry = sizeCurveMap.get(sName) || { size: sName, units: 0, modelsCount: 0 };
+          sEntry.units += qty;
+          if (!seenSizesInModel.has(sName)) {
+            sEntry.modelsCount += 1;
+            seenSizesInModel.add(sName);
+          }
+          sizeCurveMap.set(sName, sEntry);
+        }
+      }
     }
   }
   const stockTotalUnits = stock.SUPERIOR + stock.INFERIOR + stock.CONJUNTO + stock.OTRO;
+  const sizeOrderRank = { 'XS': 1, 'S': 2, 'M': 3, 'L': 4, 'XL': 5, 'XXL': 6, '30': 10, '32': 11, '34': 12, '36': 13, '38': 14, '40': 15, '41': 16, '42': 17, '43': 18, '44': 19, '45': 20 };
+  const sizeCurve = Array.from(sizeCurveMap.values())
+    .map(s => ({ ...s, pct: pct1(s.units, stockTotalUnits) }))
+    .sort((a, b) => (sizeOrderRank[a.size] || 99) - (sizeOrderRank[b.size] || 99));
+
+  const stockByCategory = Array.from(stockCatMap.values())
+    .map(c => ({ ...c, pct: pct1(c.units, stockTotalUnits) }))
+    .sort((a, b) => b.units - a.units);
 
   const garmentSalesUsd = groups.SUPERIOR.usd + groups.INFERIOR.usd + groups.CONJUNTO.usd + groups.OTRO.usd;
 
@@ -2239,13 +2286,18 @@ function processKpiData(billsResult, catalog, bcvData) {
       conjuntoStockPercentage: pct1(stock.CONJUNTO, stockTotalUnits),
       otrosStockPercentage: pct1(stock.OTRO, stockTotalUnits),
       // Proporción inferior vs superior (sin conjuntos), usada para la sugerencia de reposición
-      inferiorVsSuperiorPercentage: pct1(stock.INFERIOR, stock.SUPERIOR + stock.INFERIOR)
+      inferiorVsSuperiorPercentage: pct1(stock.INFERIOR, stock.SUPERIOR + stock.INFERIOR),
+      sizeCurve,
+      stockByCategory
     },
     paymentMethods: paymentMethodsDetailed,
     topProducts: Array.from(productMap.values())
       .map(p => ({ ...p, totalUsd: r2(p.totalUsd) }))
       .sort((a, b) => b.units - a.units || b.totalUsd - a.totalUsd)
       .slice(0, 10),
+    allProductsSold: Array.from(productMap.values())
+      .map(p => ({ ...p, totalUsd: r2(p.totalUsd) }))
+      .sort((a, b) => b.units - a.units || b.totalUsd - a.totalUsd),
     topCategories: Array.from(categoryMap.values())
       .map(c => ({ ...c, totalUsd: r2(c.totalUsd) }))
       .sort((a, b) => b.totalUsd - a.totalUsd),
