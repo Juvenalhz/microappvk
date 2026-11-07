@@ -983,10 +983,10 @@ export default function KpiModule({ bcvRate }) {
                     <div>
                       <h3 className="font-extrabold text-white text-sm flex items-center space-x-2">
                         <Sparkles className="w-4 h-4 text-amber-400" />
-                        <span>Ranking de Prendas Vendidas en el Período ({filteredSold.length} modelos)</span>
+                        <span>Ranking de Prendas Salientes en el Período ({filteredSold.length} modelos)</span>
                       </h3>
                       <p className="text-[10px] text-slate-400">
-                        Excluye bolsas, cajas, accesorios y colaboraciones $0. Busca cualquier prenda o despliega la lista completa.
+                        Coincide 100% con FINA ERP (incluye ventas cobradas + colaboraciones $0 desglosadas; excluye bolsas y cajas).
                       </p>
                     </div>
 
@@ -1049,7 +1049,14 @@ export default function KpiModule({ bcvRate }) {
                           </span>
                           <div className="min-w-0">
                             <h4 className="font-bold text-white truncate">{p.name}</h4>
-                            <span className="text-[10px] text-slate-400 uppercase font-mono">{p.category}</span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] text-slate-400 uppercase font-mono">{p.category}</span>
+                              {(p.collabUnits || 0) > 0 && (
+                                <span className="text-[9px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded">
+                                  {p.paidUnits ?? (p.units - p.collabUnits)} vend. + {p.collabUnits} colab. ($0)
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -1305,11 +1312,11 @@ export default function KpiModule({ bcvRate }) {
                         </div>
                         <div>
                           <span className="text-[9px] text-slate-400 block">Costo Stock</span>
-                          <strong className="text-sky-300">${cat.costUsd.toFixed(0)}</strong>
+                          <strong className="text-sky-300">${Number(cat.costValueUsd ?? cat.costUsd ?? 0).toFixed(0)}</strong>
                         </div>
                         <div>
                           <span className="text-[9px] text-slate-400 block">Valor PVP</span>
-                          <strong className="text-emerald-400">${cat.retailUsd.toFixed(0)}</strong>
+                          <strong className="text-emerald-400">${Number(cat.retailValueUsd ?? cat.retailUsd ?? 0).toFixed(0)}</strong>
                         </div>
                       </div>
                     </div>
@@ -2215,8 +2222,11 @@ export default function KpiModule({ bcvRate }) {
 
                           <div className="grid grid-cols-4 gap-1.5 text-[11px] font-mono bg-slate-900/60 p-2 rounded-xl border border-slate-800/70">
                             <div>
-                              <span className="text-[9px] text-slate-400 block">Lote → Vend.</span>
+                              <span className="text-[9px] text-slate-400 block">Lote → Salientes</span>
                               <strong className="text-white">{p.initialUnits}</strong> → <strong className="text-emerald-400">{p.soldUnits}</strong>
+                              <span className="text-[9px] text-amber-300 block">
+                                {p.periodSoldUnits || 0} en período{p.collabUnits > 0 ? ` (${p.collabUnits} colab.)` : ''}
+                              </span>
                             </div>
                             <div>
                               <span className="text-[9px] text-slate-400 block">En Percha</span>

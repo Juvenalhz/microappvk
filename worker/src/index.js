@@ -1964,19 +1964,27 @@ function processKpiData(billsResult, catalog, bcvData) {
       groups[group].usd += lineUsd;
       groups[group].units += amount;
 
-      // Excluir colaboraciones en $0 del ranking de "Más Vendidas" para no mostrar prendas con $0 USD vendidos
-      if (!isCollab) {
-        const pKey = pName.toLowerCase();
-        const pEntry = productMap.get(pKey) || { name: pName, category: pCategory, group, units: 0, totalUsd: 0 };
-        pEntry.units += amount;
-        pEntry.totalUsd += lineUsd;
-        productMap.set(pKey, pEntry);
-
-        const cEntry = categoryMap.get(pCategory) || { category: pCategory, group, units: 0, totalUsd: 0 };
-        cEntry.units += amount;
-        cEntry.totalUsd += lineUsd;
-        categoryMap.set(pCategory, cEntry);
+      // Contabilizar todas las prendas salientes (ventas cobradas + colaboraciones $0) para coincidir 100% con FINA ERP, desglosando pagadas vs colab.
+      const pKey = pName.toLowerCase();
+      const pEntry = productMap.get(pKey) || { name: pName, category: pCategory, group, units: 0, paidUnits: 0, collabUnits: 0, totalUsd: 0 };
+      pEntry.units += amount;
+      if (isCollab || lineUsd === 0) {
+        pEntry.collabUnits += amount;
+      } else {
+        pEntry.paidUnits += amount;
       }
+      pEntry.totalUsd += lineUsd;
+      productMap.set(pKey, pEntry);
+
+      const cEntry = categoryMap.get(pCategory) || { category: pCategory, group, units: 0, paidUnits: 0, collabUnits: 0, totalUsd: 0 };
+      cEntry.units += amount;
+      if (isCollab || lineUsd === 0) {
+        cEntry.collabUnits += amount;
+      } else {
+        cEntry.paidUnits += amount;
+      }
+      cEntry.totalUsd += lineUsd;
+      categoryMap.set(pCategory, cEntry);
     }
     totalGarments += docGarments;
 
